@@ -1,11 +1,13 @@
 """Self-contained tests; run with `pytest -q` in this node directory."""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import json
 import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import types
 import uuid
 import wave
@@ -271,6 +273,73 @@ def test_live_save_failure_cleans_recording_temporary_files(package, monkeypatch
     session.stop()
 
 
+@pytest.mark.parametrize("first_mode", ["record", "live"])
+def test_concurrent_saves_keep_both_recordings(package, monkeypatch, first_mode):
+    module, _, _ = package
+    options = {"filename_prefix": f"concurrent/{first_mode}", "format": "original"}
+    first_pcm = samples(4800) * np.float32(0.25)
+    second_pcm = samples(4800) * np.float32(0.75)
+    first = module.REGISTRY.start(str(uuid.uuid4()), first_mode, 48000, 2, **options)
+    first.append(first_pcm.tobytes())
+    second = module.REGISTRY.start(str(uuid.uuid4()), "live", 48000, 2)
+    second.append(second_pcm.tobytes())
+    second_snapshot = module.REGISTRY.snapshot(second.session_id, 0.1)
+    first_snapshot = module.REGISTRY.snapshot(first.session_id, 0.1) if first_mode == "live" else None
+    first_save = first.stop if first_mode == "record" else lambda: module.REGISTRY.save_snapshot(first_snapshot, **options)
+    original_path = sys.modules["folder_paths"].get_save_image_path
+    allocated = threading.Barrier(2)
+
+    def choose_same_counter(*args):
+        result = original_path(*args)
+        allocated.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(sys.modules["folder_paths"], "get_save_image_path", choose_same_counter)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_result = pool.submit(first_save)
+        second_result = pool.submit(module.REGISTRY.save_snapshot, second_snapshot, **options)
+        first_file, second_file = first_result.result(timeout=10), second_result.result(timeout=10)
+    assert first_file != second_file
+    for path, expected in [(first_file, first_pcm), (second_file, second_pcm)]:
+        saved, _ = module.RecordedTabAudio().run(path)
+        np.testing.assert_array_equal(saved["waveform"][0].numpy().T, expected)
+    assert second.active
+    first.stop()
+    second.stop()
+
+
+def test_expired_snapshot_during_open_returns_client_error(package, monkeypatch):
+    module, routes, _ = package
+    session = module.REGISTRY.start(str(uuid.uuid4()), "live", 48000, 2)
+    session.append(samples(4800).tobytes())
+    snapshot_id = module.REGISTRY.snapshot(session.session_id, 0.1)
+    snapshot_path = module.REGISTRY.snapshots[snapshot_id].path
+    original_open = Path.open
+
+    def expire_before_open(path, *args, **kwargs):
+        if path == snapshot_path:
+            path.unlink()
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", expire_before_open)
+
+    async def check():
+        aioapp = web.Application()
+        aioapp.add_routes(routes)
+        async with TestServer(aioapp) as server:
+            async with TestClient(server) as client:
+                headers = {"Origin": str(server.make_url("/")).rstrip("/")}
+                async with client.post("/tab_audio/save_snapshot", headers=headers, json={"snapshot_id": snapshot_id}) as response:
+                    assert response.status == 400
+                    assert "snapshot" in (await response.json())["error"].lower()
+
+    asyncio.run(check())
+    assert session.active
+    temp = Path(sys.modules["folder_paths"].get_temp_directory()) / "tab_audio_capture"
+    assert not list(temp.glob("record_*.f32"))
+    session.stop()
+
+
 def test_live_snapshot_command_and_save_endpoint(package):
     asyncio.run(check_live_snapshot_command_and_save_endpoint(package))
 
@@ -300,9 +369,9 @@ async def check_live_snapshot_command_and_save_endpoint(package):
                 assert module.REGISTRY.get(session_id).active
                 saved, _ = module.RecordedTabAudio().run(saved_file)
                 np.testing.assert_allclose(saved["waveform"][0].numpy().T, samples(4800), atol=4e-5)
-                for body in [{"snapshot_id": str(uuid.uuid4())}, {"snapshot_id": snapshot_id, "format": "mp3"}, {"snapshot_id": snapshot_id, "filename_prefix": "../../outside"}]:
+                for body in [[], "x", None, 0, False, {"snapshot_id": str(uuid.uuid4())}, {"snapshot_id": snapshot_id, "format": "mp3"}, {"snapshot_id": snapshot_id, "filename_prefix": "../../outside"}]:
                     async with client.post("/tab_audio/save_snapshot", headers=headers, json=body) as result:
-                        assert result.status == 400
+                        assert result.status == 400, body
                 async with client.post("/tab_audio/save_snapshot", headers={"Origin": "https://invalid.example"}, json={"snapshot_id": snapshot_id}) as result:
                     assert result.status == 403
                 assert module.REGISTRY.get(session_id).active

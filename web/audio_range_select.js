@@ -4,6 +4,17 @@ const NODE_TYPE = "TabAudioRangeSelect";
 const PADDING = 10;
 const states = new WeakMap();
 const registered = new WeakSet();
+const nextUpBits = new DataView(new ArrayBuffer(8));
+
+// Match Python math.nextafter(value, math.inf) for finite nonnegative positions.
+function positiveNextUp(value) {
+  if (value === 0) return Number.MIN_VALUE;
+  nextUpBits.setFloat64(0, value);
+  const low = nextUpBits.getUint32(4);
+  nextUpBits.setUint32(4, low + 1);
+  if (low === 0xffffffff) nextUpBits.setUint32(0, nextUpBits.getUint32(0) + 1);
+  return nextUpBits.getFloat64(0);
+}
 
 function install(node) {
   if (states.has(node)) return states.get(node);
@@ -29,7 +40,7 @@ function install(node) {
     if (!source || !Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to < 0) return null;
     const last = to === 0 ? source.duration : Math.min(to, source.duration);
     if (from >= last) return null;
-    const sample = (seconds) => Math.floor(seconds * source.sample_rate * (1 + Number.EPSILON));
+    const sample = (seconds) => Math.floor(positiveNextUp(seconds * source.sample_rate));
     const first = sample(from);
     const final = last >= source.duration ? source.total_samples : sample(last);
     return final > first ? [first, final] : null;
@@ -186,7 +197,7 @@ function install(node) {
     state.message = "Loading waveform…";
     draw();
     try {
-      const queued = await app.queuePrompt(0, 1, { queueNodeIds: [String(node.id)] });
+      const queued = await app.queuePrompt(0, 1, [String(node.id)]);
       if (queued === false) throw new Error("Could not queue waveform. Check the audio input and range.");
     } catch (error) {
       state.message = error.message;
