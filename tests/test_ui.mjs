@@ -37,7 +37,7 @@ function setup(mode = "record") {
       if (typeof data !== "string") return;
       const command = JSON.parse(data).command;
       if (command === "start") this.emit("message", { event: "started" });
-      if (command === "stop") this.emit("message", { event: "stopped", saved_file: `music/take_00001.${find("format").value === "m4a" ? "m4a" : "wav"}` });
+      if (command === "stop") this.emit("message", { event: "stopped", saved_file: `music/take_00001.${find("format")?.value === "m4a" ? "m4a" : "wav"}` });
     }
     close() { this.readyState = 3; this.emit("close"); }
   }
@@ -99,19 +99,45 @@ function setup(mode = "record") {
   };
   const find = (name) => node.widgets.find((widget) => widget.name === name);
   extension.nodeCreated(node);
-  return { node, find, state: node.__tabAudioState, navigator, track, sent, requests, captureOptions };
+  return { node, find, state: node.__tabAudioState, navigator, stream, track, sent, requests, captureOptions };
 }
 
-test("capture picker offers other Chrome tabs without excluding the ComfyUI tab", async () => {
-  const { state, captureOptions } = setup();
+for (const mode of ["record", "live"]) {
+  test(`${mode}: capture picker offers tab and system audio`, async () => {
+    const { state, captureOptions } = setup(mode);
+    state.button.callback();
+    assert.match(state.statusWidget.textContent, /Chrome Tab.*Entire Screen/);
+    await tick();
+    assert.equal(captureOptions[0].video.displaySurface, "browser");
+    assert.notEqual(captureOptions[0].preferCurrentTab, true);
+    assert.equal(captureOptions[0].selfBrowserSurface, "include");
+    assert.equal(captureOptions[0].audio.suppressLocalAudioPlayback, false);
+    assert.equal(captureOptions[0].systemAudio, "include");
+    state.button.callback();
+    await tick();
+  });
+}
+
+test("the existing recorder accepts entire-screen audio", async () => {
+  const { state, stream } = setup();
+  stream.getVideoTracks = () => [{ getSettings: () => ({ displaySurface: "monitor" }) }];
   state.button.callback();
   await tick();
-  assert.equal(captureOptions[0].video.displaySurface, "browser");
-  assert.notEqual(captureOptions[0].preferCurrentTab, true);
-  assert.equal(captureOptions[0].selfBrowserSurface, "include");
-  assert.equal(captureOptions[0].audio.suppressLocalAudioPlayback, false);
+  assert.equal(state.active, true);
   state.button.callback();
   await tick();
+  assert.match(state.player.src, /take_00001.wav/);
+});
+
+test("missing audio explains both sharing choices and releases the capture", async () => {
+  const { state, stream, track } = setup();
+  stream.getAudioTracks = () => [];
+  state.button.callback();
+  await tick();
+  assert.equal(state.active, false);
+  assert.equal(state.busy, false);
+  assert.equal(track.stopped, true);
+  assert.match(state.statusWidget.textContent, /Share tab audio.*Share system audio/);
 });
 
 test("one native recording button, format visibility, and restored preview", () => {

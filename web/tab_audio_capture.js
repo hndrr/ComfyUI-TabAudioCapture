@@ -198,18 +198,18 @@ async function startCapture(state) {
     previewRecording(state, "");
   }
   state.player.pause();
-  setStatus(state, "Choose the Chrome tab to record + Share tab audio…");
+  setStatus(state, "Choose Chrome Tab + tab audio, or Entire Screen + system audio…");
 
-  // IMPORTANT: getDisplayMedia must be called from the button's user gesture.
-  // Capture the TAB (including cross-origin iframes), not the iframe DOM.
+  // getDisplayMedia must be called from the button's user gesture.
   let capturePromise;
   try {
     if (!window.isSecureContext) throw new Error("HTTPS or localhost is required for screen capture");
-    if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("Tab capture is not supported in this browser");
+    if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("Audio capture is not supported in this browser");
     capturePromise = navigator.mediaDevices.getDisplayMedia({
       video: { displaySurface: "browser" },
       audio: { suppressLocalAudioPlayback: false },
       selfBrowserSurface: "include",
+      systemAudio: "include",
     });
   } catch (error) {
     state.busy = false;
@@ -227,7 +227,7 @@ async function startCapture(state) {
     }
     const tracks = state.stream.getAudioTracks();
     if (!tracks.length) {
-      throw new Error("No audio track. Select a Chrome TAB and enable 'Share tab audio'");
+      throw new Error("No audio track. Enable Share tab audio for Chrome Tab, or Share system audio for Entire Screen (requires browser/OS support).");
     }
 
     const audioOnly = new MediaStream(tracks);

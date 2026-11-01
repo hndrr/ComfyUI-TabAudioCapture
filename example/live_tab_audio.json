@@ -110,8 +110,8 @@
         440
       ],
       "size": [
-        400,
-        160
+        470,
+        200
       ],
       "flags": {},
       "order": 2,
@@ -120,7 +120,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "1. duration_seconds で切り出す長さを設定。\n2. Start Capture → 録音したいChromeタブ → タブの音声も共有。\n3. 音を再生して Run。押した時点の直近N秒を出力します。\nStop Capture 後も最後の音声で Run できます。"
+        "1. Set duration_seconds to the desired snapshot length.\n2. Start Capture, then choose Chrome Tab + Share tab audio, or Entire Screen + Share system audio.\n3. Play audio and Run. The output contains the latest N seconds at queue time.\nThe last captured buffer remains available after Stop Capture.\nSystem audio requires browser/OS support."
       ],
       "color": "#432",
       "bgcolor": "#653"
