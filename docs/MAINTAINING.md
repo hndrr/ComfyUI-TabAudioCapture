@@ -61,9 +61,9 @@ The preparation workflow explicitly calls common CI on the PR merge revision and
 
 Complete the preceding release before preparing another one. Run **Prepare release PR** on `main`, choosing `patch`, `minor` or `major`. The workflow bumps the latest prepared version and summarizes the entire diff since its `vX.Y.Z` tag. It creates or resumes `codex/release/<version>` and never overwrites edits in an existing open PR.
 
-Review the release-history entry and test results before merging. Publication only runs for a prepared history entry. All test jobs resolve one immutable revision; the publishing action checks out the same tested commit without its own checkout. Publishing and note synchronization share one concurrency queue.
+Review the release-history entry and test results before merging. Publication only runs for a prepared history entry. All test jobs resolve one immutable revision; the publishing job checks out the same tested commit. Publishing and note synchronization share one concurrency queue.
 
-Actions and Copilot CLI are pinned, and `.github/requirements-release.txt` pins the CLI used for local/CI archive checks. Keep that pin and the publishing workflow's `comfy-cli` constraint in sync when upgrading. Changes to release tooling should pass the mocked release tests and actual archive check before use.
+Workflows use the `ubuntu-24.04` runner image and Node.js 24-based Actions pinned to full commit SHAs. Copilot CLI is also pinned. Both archive checks and publishing install the same CLI from `.github/requirements-release.txt`; update that file when upgrading. Changes to release tooling should pass the mocked release tests and actual archive check before use.
 
 ## Retry and recover
 

@@ -1,4 +1,4 @@
-# ComfyUI Tab/System Audio Capture
+# ComfyUI-TabAudioCapture
 
 [![Tests](https://github.com/hndrr/ComfyUI-TabAudioCapture/actions/workflows/tests.yml/badge.svg)](https://github.com/hndrr/ComfyUI-TabAudioCapture/actions/workflows/tests.yml)
 

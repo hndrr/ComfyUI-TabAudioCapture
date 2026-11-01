@@ -13,6 +13,6 @@ Documentation = "https://github.com/hndrr/ComfyUI-TabAudioCapture#readme"
 
 [tool.comfy]
 PublisherId = "hndr"
-DisplayName = "ComfyUI Tab/System Audio Capture"
+DisplayName = "ComfyUI-TabAudioCapture"
 Icon = ""
 includes = []
