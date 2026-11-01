@@ -45,8 +45,8 @@ def release_prompt():
 
 
 def generate_summary(prompt):
-    if not os.environ.get("COPILOT_GITHUB_TOKEN"):
-        raise ValueError("Configure COPILOT_GITHUB_TOKEN or provide the release_notes input")
+    if not os.environ.get("GITHUB_TOKEN"):
+        raise ValueError("Run Prepare release PR in GitHub Actions with GITHUB_TOKEN, or provide the release_notes input")
     with tempfile.TemporaryDirectory() as directory:
         try:
             result = subprocess.run([
