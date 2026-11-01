@@ -207,6 +207,8 @@ async def tab_audio_save_snapshot(request: web.Request) -> web.Response:
         return web.json_response({"error": "Invalid request Origin"}, status=403)
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Expected a JSON object")
         saved_file = await asyncio.to_thread(
             REGISTRY.save_snapshot,
             body.get("snapshot_id"),

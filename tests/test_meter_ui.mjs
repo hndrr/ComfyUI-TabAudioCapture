@@ -250,6 +250,35 @@ test("zero samples display real negative infinity and silence needs two continuo
   assert.match(state.status.textContent, /^Silence/);
 });
 
+test("unchanged waiting status avoids DOM writes and monitoring still updates levels", () => {
+  const capture = captureNode();
+  capture.capture.active = false;
+  const h = setup(capture);
+  h.connect();
+  let text = h.state.status.textContent;
+  let writes = 0;
+  Object.defineProperty(h.state.status, "textContent", {
+    get() { return text; },
+    set(value) { text = value; writes++; },
+  });
+  h.poll();
+  h.poll();
+  assert.equal(writes, 0);
+  capture.capture.active = true;
+  h.poll();
+  assert.equal(writes, 1);
+  capture.source.samples = [[0.9], [0.1]];
+  h.poll();
+  assert.equal(writes, 2);
+  assert.match(h.state.channels[0].value.textContent, /-0\.9 dBFS/);
+  capture.capture.active = false;
+  h.poll();
+  assert.equal(writes, 3);
+  assert.ok(h.state.channels.every((channel) => channel.value.textContent === "—" && channel.fill.style.width === "0%"));
+  h.poll();
+  assert.equal(writes, 3);
+});
+
 test("peaks at and above full scale retain dBFS readings and clamp only bar length", () => {
   const capture = captureNode(1, "TabAudioCaptureRecorder", [[-1], [2]]);
   const { connect, state } = setup(capture);

@@ -130,6 +130,7 @@ function installMeter(node) {
   node.__tabAudioMeter = state;
 
   const render = (message, levels = null) => {
+    if (levels === null && state.status.textContent === message) return;
     state.status.textContent = message;
     state.channels.forEach(({ bar, fill, value }, channel) => {
       const db = levels?.[channel];

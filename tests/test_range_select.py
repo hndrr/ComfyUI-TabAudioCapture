@@ -13,6 +13,7 @@ spec = importlib.util.spec_from_file_location("tab_audio_range_select", Path(__f
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 AudioRangeSelect = module.AudioRangeSelect
+RANGE_BOUNDS = json.loads(Path(__file__).with_name("range_bounds.json").read_text())
 
 
 def audio(samples=100, sample_rate=10, batch=1, channels=1, dtype=torch.float32):
@@ -59,6 +60,18 @@ def test_decimal_exact_boundaries_and_noninteger_duration():
     torch.testing.assert_close(result["waveform"], source["waveform"][..., 29:57], rtol=0, atol=0)
     tail = AudioRangeSelect().run(source, 0.96, 0)["result"][0]["waveform"]
     assert tail.flatten().tolist() == [96]
+
+
+@pytest.mark.parametrize("case", RANGE_BOUNDS, ids=lambda case: case["name"])
+def test_shared_range_bounds_select_source_samples(case):
+    source = audio(samples=case["total_samples"], sample_rate=case["sample_rate"], batch=2, channels=2, dtype=torch.float64)
+    if case["samples"] is None:
+        with pytest.raises(ValueError, match="range"):
+            AudioRangeSelect().run(source, case["start"], case["end"])
+        return
+    selected = AudioRangeSelect().run(source, case["start"], case["end"])["result"][0]["waveform"]
+    first, last = case["samples"]
+    torch.testing.assert_close(selected, source["waveform"][..., first:last], rtol=0, atol=0)
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32, torch.float64, torch.bfloat16])

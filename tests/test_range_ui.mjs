@@ -5,11 +5,13 @@ import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../web/audio_range_select.js", import.meta.url), "utf8")
   .replace(/^import .*;\n/gm, "");
+const rangeBounds = JSON.parse(fs.readFileSync(new URL("./range_bounds.json", import.meta.url), "utf8"));
 
 function setup({ start = 0, end = 0, id = 42 } = {}) {
   let extension;
   let queueResult = async () => true;
   const queues = [];
+  const executions = [];
   const observers = [];
   const callbacks = [];
   const commands = [];
@@ -53,7 +55,13 @@ function setup({ start = 0, end = 0, id = 42 } = {}) {
   }
   const app = {
     registerExtension(value) { extension = value; },
-    async queuePrompt(...args) { queues.push(args); return queueResult(...args); },
+    async queuePrompt(number, batchCount, queueNodeIds) {
+      queues.push([number, batchCount, queueNodeIds]);
+      // Older frontends use an array's length to decide whether to execute partially.
+      const partialTargets = queueNodeIds?.length ? Array.from(queueNodeIds) : null;
+      executions.push({ partialTargets, outputIds: partialTargets ?? [String(id), "downstream-output", "unrelated-output"] });
+      return queueResult(number, batchCount, queueNodeIds);
+    },
   };
   vm.runInNewContext(source, {
     app, document: { createElement: (tag) => new Element(tag) }, ResizeObserver: Observer,
@@ -118,7 +126,7 @@ function setup({ start = 0, end = 0, id = 42 } = {}) {
   };
   const selection = () => [find("start_seconds").value, find("end_seconds").value];
   const highlight = () => commands.filter((command) => command.method === "fillRect" && command.alpha === 0.22).at(-1);
-  return { extension, Node, node, find, canvas, status, commands, callbacks, observers, queues,
+  return { extension, Node, node, find, canvas, status, commands, callbacks, observers, queues, executions,
     execute, drag, selection, highlight, setQueue: (fn) => { queueResult = fn; } };
 }
 
@@ -156,6 +164,24 @@ test("execution draws the full multichannel source and highlights default full r
   assert.equal(h.node.hooks.at(-1)[0], "executed");
   assert.equal(h.node.hooks.at(-1)[2][1], "execution-marker");
 });
+
+for (const fixture of rangeBounds) {
+  test(`shared range bounds render backend source samples: ${fixture.name}`, () => {
+    const h = setup({ start: fixture.start, end: fixture.end });
+    h.execute({ sample_rate: fixture.sample_rate, total_samples: fixture.total_samples,
+      duration: fixture.total_samples / fixture.sample_rate });
+    assert.deepEqual(h.selection(), [fixture.start, fixture.end]);
+    if (fixture.samples === null) {
+      assert.equal(h.highlight(), undefined);
+      assert.match(h.status.textContent, /nonempty range/);
+      return;
+    }
+    const [first, last] = fixture.samples;
+    const left = 10 + first / fixture.total_samples * 280;
+    const right = 10 + last / fixture.total_samples * 280;
+    assert.deepEqual(Array.from(h.highlight().args), [left, 0, right - left, 108]);
+  });
+}
 
 test("drag writes native numeric widgets immediately and notifies existing callbacks", () => {
   const h = setup();
@@ -305,14 +331,16 @@ test("configure and repeated execution retain saved numeric selections, with no 
   assert.equal(h.find("range_waveform").computeSize()[1], 266);
 });
 
-test("Load Waveform uses only the installed partial queue API and stringifies node IDs", async () => {
+test("Load Waveform partially queues only this node on array-only frontends", async () => {
   const h = setup({ start: 2, end: 5, id: 84 });
   let finish;
   h.setQueue(() => new Promise((resolve) => { finish = resolve; }));
   const loading = h.find("Load Waveform").callback();
   await h.find("Load Waveform").callback();
   assert.equal(h.queues.length, 1);
-  assert.equal(JSON.stringify(h.queues[0]), JSON.stringify([0, 1, { queueNodeIds: ["84"] }]));
+  assert.deepEqual(h.queues[0].slice(0, 2), [0, 1]);
+  assert.deepEqual(h.executions[0].partialTargets, ["84"]);
+  assert.deepEqual(h.executions[0].outputIds, ["84"]);
   assert.deepEqual(h.selection(), [2, 5]);
   assert.match(h.status.textContent, /Loading waveform/);
   finish(true);
@@ -322,6 +350,7 @@ test("Load Waveform uses only the installed partial queue API and stringifies no
   h.setQueue(async () => true);
   await h.find("Load Waveform").callback();
   assert.equal(h.queues.length, 2);
+  assert.deepEqual(h.executions[1].outputIds, ["84"]);
 });
 
 test("queue rejection and false results display errors and allow retry", async () => {
