@@ -32,16 +32,15 @@ The CLI packs **Git-tracked files**, so stage newly added files before checking 
 
 ## One-time GitHub setup
 
-Under **Settings → Secrets and variables → Actions**, add these repository Secrets:
+Under **Settings → Secrets and variables → Actions**, add this repository Secret:
 
 | Secret | Value | Used by |
 | --- | --- | --- |
 | `REGISTRY_ACCESS_TOKEN` | A Comfy Registry publishing API key for publisher `hndr` | Registry publishing and note synchronization |
-| `COPILOT_GITHUB_TOKEN` | A personal fine-grained GitHub token with the **Copilot Requests** account permission and access appropriate to this repository | Automatic release summaries |
 
 Create the Registry key using the [Comfy Registry publishing instructions](https://docs.comfy.org/registry/publishing). Verify that `tab-audio-capture` belongs to the intended publisher when making the first release. A conflicting Registry package must be resolved before publishing.
 
-For Copilot, follow [GitHub's Actions authentication instructions](https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/automate-with-actions). This is a personal repository: the workflow uses `COPILOT_GITHUB_TOKEN`, rather than organization billing through `copilot-requests: write`. Copilot availability, allowance and billing follow that token owner's plan. Providing the `release_notes` input skips Copilot entirely.
+Copilot uses the automatic `GITHUB_TOKEN` with `copilot-requests: write` on the summary-generation job, matching the reference repository. No personal Copilot token or Copilot Secret is required. In this personal repository, usage is billed to the repository owner's Copilot seat and follows its availability and allowance. See [GitHub's authentication and billing documentation](https://docs.github.com/en/copilot/concepts/agent-capabilities/agent-powered-workflows-and-operations/copilot-cli-in-github-actions). Providing the `release_notes` input skips Copilot entirely.
 
 Under **Settings → Actions → General → Workflow permissions**, enable **Allow GitHub Actions to create and approve pull requests**. The workflows declare their own permissions: ordinary CI reads contents; PR preparation writes contents and pull requests; validation reporting writes checks; GitHub Release creation writes contents. No separate GitHub repository PAT is needed for those operations.
 
@@ -71,6 +70,7 @@ Actions and Copilot CLI are pinned, and `.github/requirements-release.txt` pins 
 | Failure | Recovery |
 | --- | --- |
 | Copilot access, allowance, timeout, invalid summary or oversized diff | Run preparation again with a nonempty English `release_notes` input. Generation failure occurs before PR creation. |
+| An older run asks for `COPILOT_GITHUB_TOKEN` | After merging the authentication fix, start a new **Prepare release PR** run on `main`. Re-running an old attempt uses its original commit and does not pick up updated workflow or script code. |
 | PR preparation interrupted | Run preparation again with the same bump. An open PR is reused. A leftover branch with different changes requires manual review; it is not overwritten. |
 | Tests failed | Fix the failure through a PR. Never bypass the test gate. If the prepared release commit itself is broken, prepare a corrected release rather than uploading later code under its version. |
 | Registry authentication or upload failed | Correct the Secret or service issue, inspect the Registry version's status and archive, then rerun the failed workflow. Rejected versions or missing/empty archives stop completion for manual review. A version reserved before a failed upload may need Registry-side cleanup before retrying. |
