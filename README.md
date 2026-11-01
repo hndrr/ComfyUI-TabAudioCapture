@@ -1,7 +1,5 @@
 # ComfyUI-TabAudioCapture
 
-[![Tests](https://github.com/hndrr/ComfyUI-TabAudioCapture/actions/workflows/tests.yml/badge.svg)](https://github.com/hndrr/ComfyUI-TabAudioCapture/actions/workflows/tests.yml)
-
 Capture playback audio from a Chrome/Chromium tab or the entire PC and output standard ComfyUI `AUDIO`. Tab capture also includes cross-origin iframes without accessing their DOM.
 
 ## Tab/System Audio Capture
@@ -96,19 +94,6 @@ python -m pip install -r requirements.txt
 - Capture stops if pending WebSocket data exceeds 4 MiB. Network interruptions or closing the browser tab may interrupt recording. HTTPS reverse proxies must support WebSocket upgrades.
 - Intended for a local ComfyUI installation and browser. Environments that restrict custom nodes may not support these nodes.
 
-## Tests
-
-Run in this node directory using a Python environment with ComfyUI's dependencies:
-
-```bash
-python -m pytest -q
-node --test tests/*.mjs
-```
-
-The tests cover audio formats, output paths, HTTP/WebSocket behavior, pause/resume, Live saves, independent meter cleanup, waveform selection and player updates. Browser sharing dialogs are mocked; live browser recording must be verified separately. Install `pytest` only in your development environment if needed.
-
-GitHub Actions runs these tests on pull requests and pushes to `main`. See the [maintainer guide](docs/MAINTAINING.md) for development and release procedures.
-
 ## License
 
-[MIT](LICENSE). Release tooling is adapted from [Comfyui-SceneDetect](https://github.com/hndrr/Comfyui-SceneDetect).
+[MIT](LICENSE).

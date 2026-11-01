@@ -2,6 +2,8 @@
 
 The default branch is `main`. Registry releases use package ID `tab-audio-capture`, publisher `hndr` and stable `X.Y.Z` versions. Node behavior and runtime dependencies are separate from the release tooling.
 
+Release tooling is adapted from [Comfyui-SceneDetect](https://github.com/hndrr/Comfyui-SceneDetect).
+
 ## Development setup
 
 Use Python 3.12 and Node.js 22 to match CI. From this repository's root, create a development environment:
@@ -17,6 +19,8 @@ python -m unittest discover -s .github/tests -v
 ```
 
 On Windows, activate with `.venv\Scripts\activate`. The tests stub ComfyUI's server and folder paths; a ComfyUI checkout, GPU and browser sharing permissions are not required. HTTP/WebSocket tests need permission to bind localhost sockets.
+
+The tests cover audio formats, output paths, HTTP/WebSocket behavior, pause/resume, Live saves, independent meter cleanup, waveform selection and player updates. GitHub Actions runs these tests on pull requests and pushes to `main`.
 
 Keep the dependency entries in `pyproject.toml` identical to `requirements.txt`. The release tests check this relationship. Development dependencies belong under `.github/`, not in runtime requirements.
 
