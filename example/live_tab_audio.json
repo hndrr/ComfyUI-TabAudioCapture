@@ -12,8 +12,8 @@
         160
       ],
       "size": [
-        320,
-        180
+        360,
+        320
       ],
       "flags": {},
       "order": 0,
@@ -50,11 +50,19 @@
       },
       "widgets_values": [
         10,
-        ""
+        "",
+        "tab_audio/tab_audio",
+        "wav",
+        "24-bit PCM",
+        "256k"
       ],
       "widgets_values_named": {
         "duration_seconds": 10,
-        "snapshot_id": ""
+        "snapshot_id": "",
+        "filename_prefix": "tab_audio/tab_audio",
+        "format": "wav",
+        "wav_bit_depth": "24-bit PCM",
+        "m4a_bitrate": "256k"
       }
     },
     {
@@ -107,11 +115,11 @@
       "type": "Note",
       "pos": [
         60,
-        440
+        530
       ],
       "size": [
-        470,
-        200
+        520,
+        230
       ],
       "flags": {},
       "order": 2,
@@ -120,7 +128,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "1. Set duration_seconds to the desired snapshot length.\n2. Start Capture, then choose Chrome Tab + Share tab audio, or Entire Screen + Share system audio.\n3. Play audio and Run. The output contains the latest N seconds at queue time.\nThe last captured buffer remains available after Stop Capture.\nSystem audio requires browser/OS support."
+        "1. Set duration_seconds to the desired snapshot length.\n2. Start Capture, then choose Chrome Tab + Share tab audio, or Entire Screen + Share system audio.\n3. Play audio and Run. The output contains the latest N seconds at queue time.\nThe last captured buffer remains available after Stop Capture.\nSystem audio requires browser/OS support.\nSave Latest Audio saves duration_seconds using the selected Original/WAV/M4A settings without stopping capture or running the workflow."
       ],
       "color": "#432",
       "bgcolor": "#653"

@@ -64,6 +64,14 @@ function updateButton(state) {
     ? state.mode === "record" ? "Stop & Save" : "Stop Capture"
     : state.busy ? "Cancel" : state.mode === "record" ? "Start Recording" : "Start Capture";
   state.button.label = label;
+  if (state.pauseButton) {
+    state.pauseButton.label = state.pauseChanging ? "Please wait…" : state.paused ? "Resume Recording" : "Pause Recording";
+    state.pauseButton.disabled = !state.active || state.stopping || state.pauseChanging;
+  }
+  if (state.saveButton) {
+    state.saveButton.label = state.saving ? "Saving Latest Audio…" : "Save Latest Audio";
+    state.saveButton.disabled = !state.sessionId || state.busy || state.stopping || state.saving;
+  }
 }
 
 function previewRecording(state, relativeFile) {
@@ -115,10 +123,91 @@ function startClock(state) {
   state.startedAt = Date.now();
   state.clock = window.setInterval(() => {
     if (state.active && !state.stopping) {
-      const seconds = Math.floor((Date.now() - state.startedAt) / 1000);
-      setStatus(state, `Capturing ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`);
+      setStatus(state, captureStatus(state));
     }
   }, 1000);
+}
+
+function captureStatus(state) {
+  const seconds = Math.floor(state.mode === "record"
+    ? state.recordedFrames / (state.context?.sampleRate || 48000)
+    : (Date.now() - state.startedAt) / 1000);
+  const saved = state.mode === "live" && state.lastSavedFile ? ` · Saved: ${state.lastSavedFile}` : "";
+  return `${state.paused ? "Paused" : "Capturing"} ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}${saved}`;
+}
+
+async function togglePause(state) {
+  if (!state.active || state.stopping || state.pauseChanging || state.mode !== "record") return;
+  const paused = !state.paused;
+  state.pauseChanging = true;
+  updateButton(state);
+  let timer;
+  try {
+    await new Promise((resolve, reject) => {
+      state.pausePending = { resolve, reject, type: paused ? "paused" : "resumed" };
+      timer = window.setTimeout(() => reject(new Error("Recording pause timed out")), 3000);
+      state.processor.port.postMessage({ type: paused ? "pause" : "resume" });
+    });
+    if (state.active && !state.stopping) {
+      state.paused = paused;
+      setStatus(state, captureStatus(state));
+    }
+  } catch (error) {
+    if (state.active && !state.stopping) fail(state, asMessage(error));
+  } finally {
+    window.clearTimeout(timer);
+    state.pausePending = null;
+    state.pauseChanging = false;
+    updateButton(state);
+  }
+}
+
+async function saveLatest(state) {
+  if (!state.sessionId || state.busy || state.stopping || state.saving) return;
+  const options = {
+    filename_prefix: widget(state.node, "filename_prefix")?.value ?? "tab_audio/tab_audio",
+    format: widget(state.node, "format")?.value ?? "wav",
+    wav_bit_depth: widget(state.node, "wav_bit_depth")?.value ?? "24-bit PCM",
+    m4a_bitrate: widget(state.node, "m4a_bitrate")?.value ?? "256k",
+  };
+  state.saving = true;
+  updateButton(state);
+  let timer;
+  try {
+    let snapshotId;
+    if (state.active) {
+      await flushWorklet(state);
+      snapshotId = await new Promise((resolve, reject) => {
+        state.snapshotPending = { resolve, reject };
+        timer = window.setTimeout(() => reject(new Error("Live snapshot timed out")), 5000);
+        if (state.socket?.readyState !== WebSocket.OPEN) {
+          reject(new Error("Capture connection has already closed"));
+          return;
+        }
+        state.socket.send(JSON.stringify({ command: "snapshot", seconds: Number(widget(state.node, "duration_seconds")?.value ?? 10) }));
+      });
+    } else {
+      snapshotId = await snapshot(state);
+    }
+    window.clearTimeout(timer);
+    state.snapshotPending = null;
+    const response = await api.fetchApi("/tab_audio/save_snapshot", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ snapshot_id: snapshotId, ...options }),
+    });
+    const result = await parseJson(response);
+    if (!result.saved_file) throw new Error("No audio saved");
+    state.lastSavedFile = result.saved_file;
+    previewRecording(state, result.saved_file);
+    setStatus(state, state.active ? captureStatus(state) : `Saved: ${result.saved_file}`);
+  } catch (error) {
+    fail(state, `Could not save latest audio: ${asMessage(error)}`);
+  } finally {
+    window.clearTimeout(timer);
+    state.snapshotPending = null;
+    state.saving = false;
+    updateButton(state);
+  }
 }
 
 /** @param {any} state */
@@ -126,6 +215,9 @@ async function cleanup(state) {
   if (state.clock) window.clearInterval(state.clock);
   state.clock = null;
   state.active = false;
+  state.paused = false;
+  state.pausePending?.reject(new Error("Capture ended"));
+  state.snapshotPending?.reject(new Error("Capture ended"));
   const stream = state.stream;
   const context = state.context;
   const socket = state.socket;
@@ -188,8 +280,11 @@ async function onDisconnected(state) {
 
 /** @param {any} state */
 async function startCapture(state) {
-  if (state.busy || state.active || state.stopping) return;
+  if (state.busy || state.active || state.stopping || state.saving) return;
   state.busy = true;
+  state.recordedFrames = 0;
+  state.paused = false;
+  state.lastSavedFile = "";
   state.cancelRequested = false;
   state.sessionId = crypto.randomUUID();
   if (state.mode === "record") {
@@ -265,9 +360,12 @@ async function startCapture(state) {
         const packet = JSON.parse(event.data);
         if (packet.event === "started") startResolve(packet);
         if (packet.event === "stopped") stopResolve?.(packet);
+        if (packet.event === "snapshot") state.snapshotPending?.resolve(packet.snapshot_id);
+        if (packet.event === "snapshot_error") state.snapshotPending?.reject(new Error(packet.message));
         if (packet.event === "error") {
           startReject(new Error(packet.message));
           stopReject?.(new Error(packet.message));
+          state.snapshotPending?.reject(new Error(packet.message));
           fail(state, packet.message);
         }
       } catch (error) {
@@ -277,10 +375,12 @@ async function startCapture(state) {
     socket.addEventListener("error", () => {
       startReject(new Error("WebSocket connection failed"));
       stopReject?.(new Error("WebSocket connection failed"));
+      state.snapshotPending?.reject(new Error("WebSocket connection failed"));
     });
     socket.addEventListener("close", () => {
       startReject(new Error("WebSocket disconnected"));
       stopReject?.(new Error("WebSocket disconnected before save was confirmed"));
+      state.snapshotPending?.reject(new Error("WebSocket disconnected"));
       void onDisconnected(state);
     });
 
@@ -305,6 +405,10 @@ async function startCapture(state) {
     await started;
 
     state.processor.port.onmessage = (event) => {
+      if (state.pausePending && event.data?.type === state.pausePending.type) {
+        state.pausePending.resolve();
+        return;
+      }
       if (event.data?.type === "flushed") {
         state.flushResolve?.();
         return;
@@ -317,6 +421,7 @@ async function startCapture(state) {
         return;
       }
       socket.send(event.data.buffer);
+      if (state.mode === "record") state.recordedFrames += event.data.buffer.byteLength / 8;
     };
 
     state.source.connect(state.processor);
@@ -401,6 +506,8 @@ function installNodeUI(node, mode) {
     silentGain: null, socket: null, sessionId: null, active: false,
     busy: false, stopping: false, cancelRequested: false, clock: null, statusWidget: null,
     waitForStopped: null, flushResolve: null, startedAt: 0, button: null, player: null,
+    paused: false, pauseChanging: false, pausePending: null, pauseButton: null, recordedFrames: 0,
+    saving: false, snapshotPending: null, saveButton: null, lastSavedFile: "",
   };
   node.__tabAudioState = state;
 
@@ -452,22 +559,28 @@ function installNodeUI(node, mode) {
   state.button = startButton;
 
   if (mode === "record") {
-    const format = widget(node, "format");
-    if (format) {
-      const originalCallback = format.callback;
-      format.callback = function () {
-        const result = originalCallback?.apply(this, arguments);
-        applyFormatUI(node);
-        return result;
-      };
-    }
+    state.pauseButton = node.addWidget("button", "Pause Recording", null, () => { void togglePause(state); }, { serialize: false });
+    state.pauseButton.serialize = false;
+  } else {
+    state.saveButton = node.addWidget("button", "Save Latest Audio", null, () => { void saveLatest(state); }, { serialize: false });
+    state.saveButton.serialize = false;
+  }
+  const format = widget(node, "format");
+  if (format) {
+    const originalCallback = format.callback;
+    format.callback = function () {
+      const result = originalCallback?.apply(this, arguments);
+      applyFormatUI(node);
+      return result;
+    };
   }
 
   const restoreUI = () => {
     hideInputWidget(node, internalName);
+    applyFormatUI(node);
+    updateButton(state);
     if (mode === "record") {
       node.outputs[1].name = "saved_file_path";
-      applyFormatUI(node);
       previewRecording(state, widget(node, "recording_file")?.value);
     }
   };

@@ -7,10 +7,11 @@ import zipfile
 
 def check_package(path):
     required = {
-        "__init__.py", "sessions.py", "pyproject.toml", "requirements.txt", "LICENSE", "README.md",
+        "__init__.py", "sessions.py", "meter.py", "range_select.py", "pyproject.toml", "requirements.txt", "LICENSE", "README.md",
         "web/tab_audio_capture.js", "web/worklets/tab_audio_worklet.mjs",
+        "web/audio_meter.js", "web/audio_range_select.js", "example/select_audio_range.json",
         "example/record_tab_audio.json", "example/record_tab_audio_with_vhs.json", "example/live_tab_audio.json",
-        "docs/images/recorder.jpg", "docs/images/live.jpg",
+        "docs/images/recorder.jpg", "docs/images/live.jpg", "docs/images/meter.jpg", "docs/images/range_select.jpg",
     }
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
@@ -22,7 +23,7 @@ def check_package(path):
     }
     if missing or development:
         raise ValueError(f"Incorrect Registry archive: missing={sorted(missing)}, development={sorted(development)}")
-    print(f"Registry archive verified: {len(names)} files, including both nodes' screenshots")
+    print(f"Registry archive verified: {len(names)} files, including all four node screenshots")
 
 
 if __name__ == "__main__":

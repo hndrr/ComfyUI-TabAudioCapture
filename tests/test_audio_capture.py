@@ -1,11 +1,13 @@
 """Self-contained tests; run with `pytest -q` in this node directory."""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import json
 import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import types
 import uuid
 import wave
@@ -64,16 +66,19 @@ def samples(nframes=2400, channels=2):
     return np.stack([left, -left], axis=1).astype("<f4")
 
 
-def test_two_node_schemas(package):
+def test_node_schemas_and_legacy_interfaces(package):
     module, _, _ = package
+    assert set(module.NODE_CLASS_MAPPINGS) == {"TabAudioCaptureRecorder", "TabAudioCaptureLive", "TabAudioMeter", "TabAudioRangeSelect"}
     assert module.LiveTabAudio.RETURN_TYPES == ("AUDIO",)
     assert module.RecordedTabAudio.RETURN_TYPES == ("AUDIO", "STRING")
     assert module.RecordedTabAudio.RETURN_NAMES == ("audio", "saved_file_path")
     assert "duration_seconds" in module.LiveTabAudio.INPUT_TYPES()["required"]
     assert "recording_file" in module.RecordedTabAudio.INPUT_TYPES()["required"]
+    assert module.NODE_CLASS_MAPPINGS["TabAudioMeter"].INPUT_TYPES() == {"required": {"audio": ("AUDIO",)}}
+    assert module.NODE_CLASS_MAPPINGS["TabAudioRangeSelect"].RETURN_TYPES == ("AUDIO",)
 
 
-@pytest.mark.parametrize("filename", ["record_tab_audio.json", "record_tab_audio_with_vhs.json", "live_tab_audio.json"])
+@pytest.mark.parametrize("filename", ["record_tab_audio.json", "record_tab_audio_with_vhs.json", "live_tab_audio.json", "select_audio_range.json"])
 def test_example_workflow_connections_and_portable_values(package, filename):
     module, _, root = package
     workflow = json.loads((root / "example" / filename).read_text())
@@ -87,12 +92,13 @@ def test_example_workflow_connections_and_portable_values(package, filename):
     for node in workflow["nodes"]:
         if node["type"] in module.NODE_CLASS_MAPPINGS:
             schema = module.NODE_CLASS_MAPPINGS[node["type"]]
-            names = list(schema.INPUT_TYPES()["required"]) + list(schema.INPUT_TYPES().get("optional", {}))
+            names = [name for name, spec in schema.INPUT_TYPES()["required"].items() if spec[0] != "AUDIO"] + list(schema.INPUT_TYPES().get("optional", {}))
             assert dict(zip(names, node["widgets_values"])) == node["widgets_values_named"]
             for index, name in enumerate(schema.RETURN_NAMES):
                 assert node["outputs"][index]["name"] == name
-            internal = "snapshot_id" if node["type"] == "TabAudioCaptureLive" else "recording_file"
-            assert node["widgets_values_named"][internal] == ""
+            if node["type"] in ("TabAudioCaptureLive", "TabAudioCaptureRecorder"):
+                internal = "snapshot_id" if node["type"] == "TabAudioCaptureLive" else "recording_file"
+                assert node["widgets_values_named"][internal] == ""
         if node["type"] == "VHS_LoadAudio":
             link = next(link for link in workflow["links"] if link[0] == node["inputs"][0]["link"])
             assert nodes[link[1]]["outputs"][link[2]]["name"] == "saved_file_path"
@@ -214,6 +220,165 @@ def test_live_bounded_memory(package):
     assert s.ring_frames <= 120 * 8000
     assert s.latest(60).shape == (480000, 1)
     s.stop()
+
+
+@pytest.mark.parametrize("format,depth,codec", [
+    ("original", "24-bit PCM", "pcm_f32le"),
+    ("wav", "16-bit PCM", "pcm_s16le"),
+    ("wav", "24-bit PCM", "pcm_s24le"),
+    ("wav", "32-bit PCM", "pcm_s32le"),
+    ("m4a", "24-bit PCM", "aac"),
+])
+def test_save_live_snapshot_keeps_capture_and_snapshot_unchanged(package, format, depth, codec):
+    module, _, _ = package
+    session = module.REGISTRY.start(str(uuid.uuid4()), "live", 48000, 2)
+    source = samples(48000)
+    session.append(source.tobytes())
+    snapshot_id = module.REGISTRY.snapshot(session.session_id, 0.5)
+    session.append(np.zeros_like(source).tobytes())
+    options = dict(filename_prefix="live/clip", format=format, wav_bit_depth=depth, m4a_bitrate="192k")
+    first = module.REGISTRY.save_snapshot(snapshot_id, **options)
+    second = module.REGISTRY.save_snapshot(snapshot_id, **options)
+    assert first != second
+    assert session.active
+    assert session.total_frames == 96000
+    saved, _ = module.RecordedTabAudio().run(first)
+    expected = source[-24000:].T
+    if format == "m4a":
+        assert abs(saved["waveform"].shape[-1] - 24000) < 1024
+        actual = saved["waveform"][0, 0].numpy()[:24000]
+        assert np.corrcoef(actual, expected[0, :len(actual)])[0, 1] > 0.98
+    else:
+        np.testing.assert_allclose(saved["waveform"][0].numpy(), expected, atol=4e-5)
+    with av.open(str(module.recording_path(first))) as container:
+        assert container.streams.audio[0].codec_context.name == codec
+    np.testing.assert_array_equal(module.REGISTRY.load_snapshot(snapshot_id)["waveform"][0].numpy(), expected)
+    session.stop()
+
+
+def test_live_save_failure_cleans_recording_temporary_files(package, monkeypatch):
+    module, _, _ = package
+    session = module.REGISTRY.start(str(uuid.uuid4()), "live", 48000, 2)
+    session.append(samples().tobytes())
+    snapshot_id = module.REGISTRY.snapshot(session.session_id, 0.1)
+    def fail_encoding(*args, **kwargs):
+        raise RuntimeError("Encoder failed")
+    monkeypatch.setattr(av, "open", fail_encoding)
+    with pytest.raises(RuntimeError, match="Encoder failed"):
+        module.REGISTRY.save_snapshot(snapshot_id)
+    temp = Path(sys.modules["folder_paths"].get_temp_directory()) / "tab_audio_capture"
+    assert not list(temp.glob("record_*.f32"))
+    assert not list(Path(sys.modules["folder_paths"].get_output_directory()).rglob("*.part"))
+    assert session.active
+    session.stop()
+
+
+@pytest.mark.parametrize("first_mode", ["record", "live"])
+def test_concurrent_saves_keep_both_recordings(package, monkeypatch, first_mode):
+    module, _, _ = package
+    options = {"filename_prefix": f"concurrent/{first_mode}", "format": "original"}
+    first_pcm = samples(4800) * np.float32(0.25)
+    second_pcm = samples(4800) * np.float32(0.75)
+    first = module.REGISTRY.start(str(uuid.uuid4()), first_mode, 48000, 2, **options)
+    first.append(first_pcm.tobytes())
+    second = module.REGISTRY.start(str(uuid.uuid4()), "live", 48000, 2)
+    second.append(second_pcm.tobytes())
+    second_snapshot = module.REGISTRY.snapshot(second.session_id, 0.1)
+    first_snapshot = module.REGISTRY.snapshot(first.session_id, 0.1) if first_mode == "live" else None
+    first_save = first.stop if first_mode == "record" else lambda: module.REGISTRY.save_snapshot(first_snapshot, **options)
+    original_path = sys.modules["folder_paths"].get_save_image_path
+    allocated = threading.Barrier(2)
+
+    def choose_same_counter(*args):
+        result = original_path(*args)
+        allocated.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(sys.modules["folder_paths"], "get_save_image_path", choose_same_counter)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_result = pool.submit(first_save)
+        second_result = pool.submit(module.REGISTRY.save_snapshot, second_snapshot, **options)
+        first_file, second_file = first_result.result(timeout=10), second_result.result(timeout=10)
+    assert first_file != second_file
+    for path, expected in [(first_file, first_pcm), (second_file, second_pcm)]:
+        saved, _ = module.RecordedTabAudio().run(path)
+        np.testing.assert_array_equal(saved["waveform"][0].numpy().T, expected)
+    assert second.active
+    first.stop()
+    second.stop()
+
+
+def test_expired_snapshot_during_open_returns_client_error(package, monkeypatch):
+    module, routes, _ = package
+    session = module.REGISTRY.start(str(uuid.uuid4()), "live", 48000, 2)
+    session.append(samples(4800).tobytes())
+    snapshot_id = module.REGISTRY.snapshot(session.session_id, 0.1)
+    snapshot_path = module.REGISTRY.snapshots[snapshot_id].path
+    original_open = Path.open
+
+    def expire_before_open(path, *args, **kwargs):
+        if path == snapshot_path:
+            path.unlink()
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", expire_before_open)
+
+    async def check():
+        aioapp = web.Application()
+        aioapp.add_routes(routes)
+        async with TestServer(aioapp) as server:
+            async with TestClient(server) as client:
+                headers = {"Origin": str(server.make_url("/")).rstrip("/")}
+                async with client.post("/tab_audio/save_snapshot", headers=headers, json={"snapshot_id": snapshot_id}) as response:
+                    assert response.status == 400
+                    assert "snapshot" in (await response.json())["error"].lower()
+
+    asyncio.run(check())
+    assert session.active
+    temp = Path(sys.modules["folder_paths"].get_temp_directory()) / "tab_audio_capture"
+    assert not list(temp.glob("record_*.f32"))
+    session.stop()
+
+
+def test_live_snapshot_command_and_save_endpoint(package):
+    asyncio.run(check_live_snapshot_command_and_save_endpoint(package))
+
+
+async def check_live_snapshot_command_and_save_endpoint(package):
+    module, routes, _ = package
+    aioapp = web.Application()
+    aioapp.add_routes(routes)
+    async with TestServer(aioapp) as server:
+        async with TestClient(server) as client:
+            headers = {"Origin": str(server.make_url("/")).rstrip("/")}
+            session_id = str(uuid.uuid4())
+            async with client.ws_connect("/tab_audio/ws", headers=headers) as ws:
+                await ws.send_json({"command": "start", "session_id": session_id, "mode": "live", "sample_rate": 48000, "channels": 2})
+                assert (await ws.receive_json(timeout=5))["event"] == "started"
+                await ws.send_json({"command": "snapshot", "seconds": 0.1})
+                assert (await ws.receive_json(timeout=5))["event"] == "snapshot_error"
+                await ws.send_bytes(samples(4800).tobytes())
+                await ws.send_json({"command": "snapshot", "seconds": 0.1})
+                response = await ws.receive_json(timeout=5)
+                assert response["event"] == "snapshot"
+                snapshot_id = response["snapshot_id"]
+                await ws.send_bytes(np.zeros((4800, 2), dtype="<f4").tobytes())
+                async with client.post("/tab_audio/save_snapshot", headers=headers, json={"snapshot_id": snapshot_id, "filename_prefix": "live/http"}) as result:
+                    assert result.status == 200
+                    saved_file = (await result.json())["saved_file"]
+                assert module.REGISTRY.get(session_id).active
+                saved, _ = module.RecordedTabAudio().run(saved_file)
+                np.testing.assert_allclose(saved["waveform"][0].numpy().T, samples(4800), atol=4e-5)
+                for body in [[], "x", None, 0, False, {"snapshot_id": str(uuid.uuid4())}, {"snapshot_id": snapshot_id, "format": "mp3"}, {"snapshot_id": snapshot_id, "filename_prefix": "../../outside"}]:
+                    async with client.post("/tab_audio/save_snapshot", headers=headers, json=body) as result:
+                        assert result.status == 400, body
+                async with client.post("/tab_audio/save_snapshot", headers={"Origin": "https://invalid.example"}, json={"snapshot_id": snapshot_id}) as result:
+                    assert result.status == 403
+                assert module.REGISTRY.get(session_id).active
+                await ws.send_json({"command": "stop"})
+                assert (await ws.receive_json(timeout=5))["event"] == "stopped"
+                async with client.post("/tab_audio/save_snapshot", headers=headers, json={"snapshot_id": snapshot_id, "format": "m4a"}) as result:
+                    assert result.status == 200
 
 
 @pytest.mark.parametrize("format", ["original", "wav", "m4a"])
