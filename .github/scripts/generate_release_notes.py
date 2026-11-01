@@ -50,11 +50,11 @@ def generate_summary(prompt):
     with tempfile.TemporaryDirectory() as directory:
         try:
             result = subprocess.run([
-                "copilot", "--prompt", prompt, "--silent", "--model=auto", "--no-ask-user",
+                "copilot", "--silent", "--model=auto", "--no-ask-user",
                 "--available-tools", "--deny-tool=shell", "--deny-tool=write", "--deny-url",
                 "--disable-builtin-mcps", "--no-custom-instructions", "--no-auto-update",
                 "--no-color", "--log-level=none", "--no-remote-export", "--context=default",
-            ], cwd=directory, text=True, capture_output=True, check=True, timeout=120)
+            ], input=prompt, cwd=directory, text=True, capture_output=True, check=True, timeout=120)
         except FileNotFoundError:
             raise RuntimeError("Install the pinned Copilot CLI before generating notes") from None
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):

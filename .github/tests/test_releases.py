@@ -404,6 +404,21 @@ class GenerationTests(GitRepository):
             self.assertIn("--disable-builtin-mcps", run.call_args.args[0])
             self.assertNotEqual(Path(run.call_args.kwargs["cwd"]), self.root)
 
+    def test_large_prompt_reaches_copilot_through_stdin(self):
+        prompt = "Release changes:\n" + "é" * 70000
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "copilot"
+            executable.write_text(
+                f"#!{sys.executable}\n"
+                "import sys\n"
+                "assert '--prompt' not in sys.argv\n"
+                f"assert len(sys.stdin.read().encode('utf-8')) == {len(prompt.encode('utf-8'))}\n"
+                "print('- Capture playback audio.')\n"
+            )
+            executable.chmod(0o755)
+            with patch.dict(os.environ, {"COPILOT_GITHUB_TOKEN": "test", "PATH": directory + os.pathsep + os.environ["PATH"]}):
+                self.assertEqual(generate.generate_summary(prompt), "- Capture playback audio.")
+
 
 class ContractTests(unittest.TestCase):
     def test_failed_common_ci_is_reported_as_failure(self):
