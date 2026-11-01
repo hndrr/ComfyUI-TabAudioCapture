@@ -1,0 +1,151 @@
+{
+  "id": "5bf8dc64-211a-47ac-b759-3343a5460f8f",
+  "revision": 0,
+  "last_node_id": 5,
+  "last_link_id": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "TabAudioCaptureLive",
+      "pos": [
+        60,
+        160
+      ],
+      "size": [
+        320,
+        180
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "duration_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "duration_seconds"
+          },
+          "link": null
+        },
+        {
+          "name": "snapshot_id",
+          "type": "STRING",
+          "widget": {
+            "name": "snapshot_id"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TabAudioCaptureLive"
+      },
+      "widgets_values": [
+        10,
+        ""
+      ],
+      "widgets_values_named": {
+        "duration_seconds": 10,
+        "snapshot_id": ""
+      }
+    },
+    {
+      "id": 3,
+      "type": "PreviewAudio",
+      "pos": [
+        530,
+        160
+      ],
+      "size": [
+        270,
+        88
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 1
+        },
+        {
+          "localized_name": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewAudio"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 5,
+      "type": "Note",
+      "pos": [
+        60,
+        440
+      ],
+      "size": [
+        400,
+        160
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "1. duration_seconds で切り出す長さを設定。\n2. Start Capture → 録音したいChromeタブ → タブの音声も共有。\n3. 音を再生して Run。押した時点の直近N秒を出力します。\nStop Capture 後も最後の音声で Run できます。"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      3,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9,
+      "offset": [
+        30,
+        40
+      ]
+    }
+  },
+  "version": 0.4
+}
