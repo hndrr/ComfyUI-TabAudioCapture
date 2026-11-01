@@ -1,0 +1,109 @@
+name: Prepare release PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version increment (the first release keeps 0.1.0)
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      release_notes:
+        description: Optional English summary; otherwise generated with Copilot
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-preparation
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  generate-notes:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      body: ${{ steps.notes.outputs.body }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: inputs.release_notes == ''
+        with:
+          node-version: '22'
+      - name: Install Copilot CLI
+        if: inputs.release_notes == ''
+        run: npm install --global @github/copilot@1.0.94
+      - name: Generate or use the English summary
+        id: notes
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          RELEASE_NOTES_INPUT: ${{ inputs.release_notes }}
+        run: python .github/scripts/generate_release_notes.py
+
+  prepare-release-pr:
+    needs: generate-notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      pull_number: ${{ steps.prepare.outputs.pull_number }}
+      head_sha: ${{ steps.prepare.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Create or resume the release PR
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BUMP: ${{ inputs.bump }}
+          RELEASE_NOTES_INPUT: ${{ needs.generate-notes.outputs.body }}
+        run: python .github/scripts/prepare_release.py --bump "$RELEASE_BUMP"
+
+  test-release:
+    needs: prepare-release-pr
+    uses: ./.github/workflows/tests.yml
+    with:
+      ref: refs/pull/${{ needs.prepare-release-pr.outputs.pull_number }}/merge
+      expected_head: ${{ needs.prepare-release-pr.outputs.head_sha }}
+
+  report-validation:
+    needs: [prepare-release-pr, test-release]
+    if: always() && needs.prepare-release-pr.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Report all tests on the release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_HEAD_SHA: ${{ needs.prepare-release-pr.outputs.head_sha }}
+          TEST_RESULT: ${{ needs.test-release.result }}
+        run: python .github/scripts/release_notes.py report
