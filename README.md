@@ -1,10 +1,14 @@
 # ComfyUI Tab/System Audio Capture
 
+[![Tests](https://github.com/hndrr/ComfyUI-TabAudioCapture/actions/workflows/tests.yml/badge.svg)](https://github.com/hndrr/ComfyUI-TabAudioCapture/actions/workflows/tests.yml)
+
 Capture playback audio from a Chrome/Chromium tab or the entire PC and output standard ComfyUI `AUDIO`. Tab capture also includes cross-origin iframes without accessing their DOM.
 
 ## Tab/System Audio Capture
 
 This is the main recording node. It records playback audio from a Chrome tab or the entire PC, then saves the recording when you stop.
+
+![Main recording node with save controls and audio preview](docs/images/recorder.jpg)
 
 - Set the save options before `Start Recording`, then share tab or system audio. `Stop & Save` saves the recording and updates the native audio player without running the workflow.
 - `filename_prefix` selects a folder and filename inside `ComfyUI/output`. For example, `music/take` creates `output/music/take_00001.wav`. The default remains `tab_audio/tab_audio`.
@@ -29,6 +33,8 @@ Only audio is sent to ComfyUI and saved. Enable audio sharing each time you star
 
 Use this node when you need the latest N seconds at queue time. It supports the tab and entire-PC audio sources described above.
 
+![Live node with snapshot duration and capture controls](docs/images/live.jpg)
+
 - Click `Start Capture` and share tab or system audio. Capture continues independently of workflow execution and retains the latest 120 seconds.
 - Set `duration_seconds` (0.5–60 seconds), then click `Run`. The node snapshots the latest audio when you queue the workflow, so waiting for GPU execution does not change that snapshot.
 - The native audio player supports playback and seeking after a snapshot or stop. The last captured buffer remains available after `Stop Capture`.
@@ -46,6 +52,8 @@ The existing node IDs (`TabAudioCaptureLive`, `TabAudioCaptureRecorder`) and exa
 
 ## Installation
 
+### Manual installation
+
 1. Place this repository in `ComfyUI/custom_nodes/ComfyUI-TabAudioCapture`.
 2. Restart ComfyUI and reload the browser.
 3. Search for `Tab/System Audio Capture`, add the main recording node, and connect its `audio` output to an audio input. Use the optional `Live` node for rolling snapshots.
@@ -56,6 +64,16 @@ Runtime dependencies are listed in `requirements.txt`: `torch`, `numpy`, `aiohtt
 ```bash
 python -m pip install -r requirements.txt
 ```
+
+### Comfy Registry
+
+The Registry package ID is `tab-audio-capture` (publisher: `hndr`). The first release is being prepared; use manual installation until `0.1.0` is published. After publication, run this from your Comfy CLI environment:
+
+```bash
+comfy node install tab-audio-capture
+```
+
+Restart ComfyUI and reload the browser after installation.
 
 ## Notes
 
@@ -77,3 +95,9 @@ node --test tests/test_ui.mjs
 ```
 
 The tests cover audio formats, output paths, HTTP/WebSocket behavior, capture controls and player updates. Browser sharing dialogs are mocked; live browser recording must be verified separately. Install `pytest` only in your development environment if needed.
+
+GitHub Actions runs these tests, release-tool tests and a Registry package check on pull requests and pushes to `main`. See the [maintainer guide](docs/MAINTAINING.md) for development setup, release preparation, required Secrets and recovery steps.
+
+## License
+
+[MIT](LICENSE). Release tooling is adapted from [Comfyui-SceneDetect](https://github.com/hndrr/Comfyui-SceneDetect).
