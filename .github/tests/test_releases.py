@@ -278,9 +278,10 @@ class ReleaseTests(GitRepository):
 
 
 class PrepareTests(GitRepository):
-    def test_initial_release_keeps_configured_version(self):
-        for bump in ("patch", "minor", "major"):
-            self.assertEqual(prepare.next_version("0.1.0", self.history(), bump), "0.1.0")
+    def test_initial_release_honors_version_increment(self):
+        for bump, expected in (("patch", "0.1.1"), ("minor", "0.2.0"), ("major", "1.0.0")):
+            with self.subTest(bump=bump):
+                self.assertEqual(prepare.next_version("0.1.0", self.history(), bump), expected)
 
     def test_version_increments(self):
         sha = self.record()
@@ -322,12 +323,14 @@ class PrepareTests(GitRepository):
 
     def test_pr_contains_shared_notes_and_correct_branch(self):
         github = GitHubAPI()
-        prepare.prepare_pull_request(github, "owner/repo", release.git("rev-parse", "HEAD"), SOURCE, json.dumps(self.history()), "patch", "- New capture nodes.")
+        prepare.prepare_pull_request(github, "owner/repo", release.git("rev-parse", "HEAD"), SOURCE, json.dumps(self.history()), "major", "- New capture nodes.")
         tree = next(data for method, path, data in github.calls if method == "POST" and path.endswith("/git/trees"))
         history = json.loads(next(item["content"] for item in tree["tree"] if item["path"] == release.HISTORY_PATH))
-        self.assertEqual(history["releases"]["0.1.0"]["body"], "- New capture nodes.")
+        self.assertEqual(history["releases"]["1.0.0"]["body"], "- New capture nodes.")
+        metadata = tomllib.loads(next(item["content"] for item in tree["tree"] if item["path"] == "pyproject.toml"))
+        self.assertEqual(metadata["project"]["version"], "1.0.0")
         pull = next(data for method, path, data in github.calls if method == "POST" and path.endswith("/pulls"))
-        self.assertEqual((pull["base"], pull["head"]), ("main", "codex/release/0.1.0"))
+        self.assertEqual((pull["base"], pull["head"], pull["title"]), ("main", "codex/release/1.0.0", "Release v1.0.0"))
 
     def test_retry_reuses_open_pr_without_overwriting_edits(self):
         github = GitHubAPI()

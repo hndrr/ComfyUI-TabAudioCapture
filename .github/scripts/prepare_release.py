@@ -26,11 +26,10 @@ def set_project_version(source, current, version):
 
 def next_version(current, history, bump):
     major, minor, patch = version_tuple(current)
-    if not history["releases"]:
-        return current
-    if max(history["releases"], key=version_tuple) != current:
-        raise ValueError("project.version must match the latest prepared release")
-    previous_release_sha(current)
+    if history["releases"]:
+        if max(history["releases"], key=version_tuple) != current:
+            raise ValueError("project.version must match the latest prepared release")
+        previous_release_sha(current)
     return {"patch": f"{major}.{minor}.{patch + 1}", "minor": f"{major}.{minor + 1}.0", "major": f"{major + 1}.0.0"}[bump]
 
 
