@@ -1,0 +1,18 @@
+[project]
+name = "tab-audio-capture"
+description = "Record Chrome tab or system playback audio and output standard ComfyUI AUDIO, with saved recordings and rolling snapshots."
+version = "0.1.0"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = ["torch", "numpy>=1.25.0", "aiohttp>=3.11.8", "av>=17.0.0"]
+
+[project.urls]
+Repository = "https://github.com/hndrr/ComfyUI-TabAudioCapture"
+Documentation = "https://github.com/hndrr/ComfyUI-TabAudioCapture#readme"
+"Bug Tracker" = "https://github.com/hndrr/ComfyUI-TabAudioCapture/issues"
+
+[tool.comfy]
+PublisherId = "hndr"
+DisplayName = "ComfyUI Tab/System Audio Capture"
+Icon = ""
+includes = []
