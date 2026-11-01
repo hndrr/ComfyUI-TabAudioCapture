@@ -386,19 +386,19 @@ class GenerationTests(GitRepository):
             prompt.assert_not_called()
 
     def test_copilot_failure_does_not_produce_notes(self):
-        with patch.dict(os.environ, {"COPILOT_GITHUB_TOKEN": "private-test-token"}), patch.object(generate.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "copilot", stderr="private-test-token")):
+        with patch.dict(os.environ, {"GITHUB_TOKEN": "private-test-token"}), patch.object(generate.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "copilot", stderr="private-test-token")):
             with self.assertRaisesRegex(RuntimeError, "No release PR") as error:
                 generate.generate_summary("diff")
             self.assertNotIn("private-test-token", str(error.exception))
 
     def test_generated_notes_are_validated(self):
         for body in ("", "Text without bullets", "- See https://example.com", "- Thanks @author", "- 日本語", "- One\n- Two\n- Three\n- Four"):
-            with self.subTest(body=body), patch.dict(os.environ, {"COPILOT_GITHUB_TOKEN": "test"}), patch.object(generate.subprocess, "run", return_value=Mock(stdout=body)):
+            with self.subTest(body=body), patch.dict(os.environ, {"GITHUB_TOKEN": "test"}), patch.object(generate.subprocess, "run", return_value=Mock(stdout=body)):
                 with self.assertRaises(ValueError):
                     generate.generate_summary("diff")
 
     def test_copilot_runs_without_tools_outside_repository(self):
-        with patch.dict(os.environ, {"COPILOT_GITHUB_TOKEN": "test"}), patch.object(generate.subprocess, "run", return_value=Mock(stdout="- Improve audio capture.\n")) as run:
+        with patch.dict(os.environ, {"GITHUB_TOKEN": "test"}), patch.object(generate.subprocess, "run", return_value=Mock(stdout="- Improve audio capture.\n")) as run:
             self.assertEqual(generate.generate_summary("diff"), "- Improve audio capture.")
             self.assertIn("--deny-tool=write", run.call_args.args[0])
             self.assertIn("--disable-builtin-mcps", run.call_args.args[0])
@@ -410,14 +410,22 @@ class GenerationTests(GitRepository):
             executable = Path(directory) / "copilot"
             executable.write_text(
                 f"#!{sys.executable}\n"
-                "import sys\n"
+                "import os, sys\n"
+                "assert os.environ['GITHUB_TOKEN'] == 'actions-workflow-token'\n"
+                "assert not os.environ.get('COPILOT_GITHUB_TOKEN')\n"
                 "assert '--prompt' not in sys.argv\n"
                 f"assert len(sys.stdin.read().encode('utf-8')) == {len(prompt.encode('utf-8'))}\n"
                 "print('- Capture playback audio.')\n"
             )
             executable.chmod(0o755)
-            with patch.dict(os.environ, {"COPILOT_GITHUB_TOKEN": "test", "PATH": directory + os.pathsep + os.environ["PATH"]}):
+            with patch.dict(os.environ, {"GITHUB_TOKEN": "actions-workflow-token", "COPILOT_GITHUB_TOKEN": "", "PATH": directory + os.pathsep + os.environ["PATH"]}):
                 self.assertEqual(generate.generate_summary(prompt), "- Capture playback audio.")
+
+    def test_missing_actions_token_stops_before_starting_copilot(self):
+        with patch.dict(os.environ, {"GITHUB_TOKEN": ""}), patch.object(generate.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "GitHub Actions with GITHUB_TOKEN"):
+                generate.generate_summary("diff")
+            run.assert_not_called()
 
 
 class ContractTests(unittest.TestCase):
