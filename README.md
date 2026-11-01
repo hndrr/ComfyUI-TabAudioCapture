@@ -1,8 +1,8 @@
 # ComfyUI Tab Audio Capture
 
-外部サイトの埋め込み `iframe` で再生されている音声を、**Chrome / Chromium のタブ音声キャプチャ**を利用して ComfyUI の `AUDIO` 出力に変換するカスタムノードです。iframe内部の DOM にはアクセスしません。
+**Chrome / Chromium のタブ音声やPC全体の再生音**を、ComfyUI の `AUDIO` 出力に変換するカスタムノードです。外部サイトの埋め込み `iframe` の音声も、iframe内部の DOM にアクセスせず録音できます。
 
-## ノード2種類
+## ノード3種類
 
 ### Tab Audio Capture · Live
 
@@ -28,6 +28,14 @@
 
 接続例：`Tab Audio Capture · Stop & Save (AUDIO)` → `動画生成ノードのaudio_ref`。
 
+### System Audio Capture · Stop & Save
+
+- ブラウザを動かしているPC全体の再生音を録音します。音声を再生するアプリは自由です。
+- `Start Recording` → **画面全体** → **システム音声も共有**を選択してください。OSの画面・音声収録の許可が必要な場合があります。
+- `Stop & Save` で保存し、ノード内で再生できます。形式・保存先・`audio` と `saved_file_path` 出力はタブ録音と同じです。既定の保存先は `output/system_audio/`。
+- OSとブラウザがシステム音声共有に対応している必要があります。音声トラックが取得できない場合はエラーを表示します。
+- 保存・ComfyUIへの送信対象は音声です。
+
 ## サンプルワークフロー
 
 JSONをComfyUIへドラッグ＆ドロップして開いてください。録音対象は開始時に選択します。
@@ -35,6 +43,7 @@ JSONをComfyUIへドラッグ＆ドロップして開いてください。録音
 - [録音・保存・出力確認](example/record_tab_audio.json)：標準ノードで `audio` と `saved_file_path` を確認。
 - [保存パスからの読み込み](example/record_tab_audio_with_vhs.json)：`saved_file_path` → `Load Audio (Path)` → `Preview Audio`。Video Helper Suite が必要です。
 - [Liveで直近N秒を切り出す](example/live_tab_audio.json)：Live → Preview Audio。
+- [PC全体の音声を録音](example/record_system_audio.json)：System Audio Capture → Preview Audio / 保存パス表示。
 
 ## インストール
 
@@ -53,15 +62,15 @@ JSONをComfyUIへドラッグ＆ドロップして開いてください。録音
    ```
 
 2. **ComfyUIを再起動**し、ブラウザをリロードしてください。
-3. ノード検索で `Tab Audio Capture` を入力すると、上記2種類が表示されます。
+3. ノード検索で `Tab Audio Capture` または `System Audio Capture` を入力してください。
 4. 利用したいノードをグラフに追加し、`AUDIO` 出力を既存の音声入力ノードにつないでください。
-5. ノード内の `Start` を押し、Chromeの共有ダイアログで **「Chromeタブ」→「録音したいタブ」→「タブの音声も共有」** の順に選択してください。
+5. ノード内の `Start` を押し、タブ録音は **Chromeタブ＋タブ音声**、PC全体の録音は **画面全体＋システム音声** を共有してください。
 
 追加の `pip install` は基本的に不要です（ComfyUIが利用している `torch`、`numpy`、`aiohttp`、`av` を利用）。
 
 ## 技術仕様・注意点
 
-- Chrome / Chromiumを想定。マイク入力ではなく**タブ内で再生中の音声**を取得します。タブ内の他の音も混合され、外部iframeだけを個別分離することはできません。
+- Chrome / Chromiumを想定。マイク入力ではなく再生音を取得します。タブ録音はタブ内の他の音も混合され、外部iframeだけを個別分離することはできません。PC全体の録音は他のアプリや通知音も含みます。
 - `getDisplayMedia()` の仕様上、録音を開始するたびに共有先の選択と許可が必要です。HTTPの場合は `localhost`、その他はHTTPSが必要です。
 - ブラウザでのキャプチャは `AudioWorklet` → 32bit float PCM → WebSocket → ComfyUI Python サーバーです。出力は `[1, channels, samples]` の `waveform` と `sample_rate` を持つ標準 `AUDIO` 辞書です。
 - **通常の `AUDIO` ソケットは連続ストリームではありません。** LiveノードはQueue時の固定スナップショット、保存ノードはStop時に完成した音声を返す仕組みです。動画生成実行中に入力を更新するものではありません。
@@ -73,7 +82,7 @@ JSONをComfyUIへドラッグ＆ドロップして開いてください。録音
 
 ## テスト
 
-Python単体/HTTP・WebSocketテストと、録音操作・プレーヤー更新を確認するJavaScriptテストを含みます。ブラウザとComfyUIサーバーはモックするため、実機のComfyUIプロセスを起動する必要はありません。
+Python単体/HTTP・WebSocketテストと、録音操作・プレーヤー更新を確認するJavaScriptテストを含みます。ComfyUIのPython環境で実行してください。ブラウザとComfyUIサーバーはモックするため、ComfyUIプロセスの起動は不要です。
 
 ```bash
 cd ComfyUI/custom_nodes/ComfyUI-TabAudioCapture

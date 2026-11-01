@@ -4,6 +4,7 @@ import { api } from "../../scripts/api.js";
 
 const LIVE_TYPE = "TabAudioCaptureLive";
 const RECORDER_TYPE = "TabAudioCaptureRecorder";
+const SYSTEM_RECORDER_TYPE = "SystemAudioCaptureRecorder";
 const WS_MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 const AUDIO_WORKLET_URL = new URL("./worklets/tab_audio_worklet.mjs", import.meta.url).href;
 
@@ -198,18 +199,20 @@ async function startCapture(state) {
     previewRecording(state, "");
   }
   state.player.pause();
-  setStatus(state, "Choose the Chrome tab to record + Share tab audio…");
+  setStatus(state, state.systemAudio
+    ? "Choose Entire Screen + Share system audio…"
+    : "Choose the Chrome tab to record + Share tab audio…");
 
-  // IMPORTANT: getDisplayMedia must be called from the button's user gesture.
-  // Capture the TAB (including cross-origin iframes), not the iframe DOM.
+  // getDisplayMedia must be called from the button's user gesture.
   let capturePromise;
   try {
     if (!window.isSecureContext) throw new Error("HTTPS or localhost is required for screen capture");
-    if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("Tab capture is not supported in this browser");
+    if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("Audio capture is not supported in this browser");
     capturePromise = navigator.mediaDevices.getDisplayMedia({
-      video: { displaySurface: "browser" },
+      video: { displaySurface: state.systemAudio ? "monitor" : "browser" },
       audio: { suppressLocalAudioPlayback: false },
       selfBrowserSurface: "include",
+      ...(state.systemAudio ? { systemAudio: "include", surfaceSwitching: "exclude" } : {}),
     });
   } catch (error) {
     state.busy = false;
@@ -227,7 +230,12 @@ async function startCapture(state) {
     }
     const tracks = state.stream.getAudioTracks();
     if (!tracks.length) {
-      throw new Error("No audio track. Select a Chrome TAB and enable 'Share tab audio'");
+      throw new Error(state.systemAudio
+        ? "No system audio. Share an entire screen with audio enabled; your browser/OS must support system audio capture."
+        : "No audio track. Select a Chrome TAB and enable 'Share tab audio'");
+    }
+    if (state.systemAudio && state.stream.getVideoTracks()[0]?.getSettings().displaySurface !== "monitor") {
+      throw new Error("Select Entire Screen to record audio from all applications");
     }
 
     const audioOnly = new MediaStream(tracks);
@@ -401,6 +409,7 @@ function installNodeUI(node, mode) {
     silentGain: null, socket: null, sessionId: null, active: false,
     busy: false, stopping: false, cancelRequested: false, clock: null, statusWidget: null,
     waitForStopped: null, flushResolve: null, startedAt: 0, button: null, player: null,
+    systemAudio: node.comfyClass === SYSTEM_RECORDER_TYPE,
   };
   node.__tabAudioState = state;
 
@@ -495,5 +504,6 @@ app.registerExtension({
   nodeCreated(node) {
     if (node.comfyClass === LIVE_TYPE) installNodeUI(node, "live");
     if (node.comfyClass === RECORDER_TYPE) installNodeUI(node, "record");
+    if (node.comfyClass === SYSTEM_RECORDER_TYPE) installNodeUI(node, "record");
   },
 });
