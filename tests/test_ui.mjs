@@ -18,12 +18,14 @@ function element() {
 }
 
 function setup(mode = "record") {
+  const recording = mode !== "live";
   let extension;
   const requests = [];
   const captureOptions = [];
   const sent = [];
   const track = { stopped: false, stop() { this.stopped = true; }, addEventListener() {} };
-  const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+  const videoTrack = { ...track, getSettings: () => ({ displaySurface: mode === "system" ? "monitor" : "browser" }) };
+  const stream = { getTracks: () => [track, videoTrack], getAudioTracks: () => [track], getVideoTracks: () => [videoTrack] };
   class Socket {
     static OPEN = 1;
     readyState = 0;
@@ -79,12 +81,12 @@ function setup(mode = "record") {
     WebSocket: Socket, URL, URLSearchParams, crypto: { randomUUID: () => "capture-123" },
     console: { error() {} }, requestAnimationFrame: (callback) => callback(),
   });
-  const names = mode === "record" ? ["recording_file", "filename_prefix", "format", "wav_bit_depth", "m4a_bitrate"] : ["duration_seconds", "snapshot_id"];
-  const values = mode === "record" ? ["", "music/take", "wav", "24-bit PCM", "256k"] : [10, ""];
+  const names = recording ? ["recording_file", "filename_prefix", "format", "wav_bit_depth", "m4a_bitrate"] : ["duration_seconds", "snapshot_id"];
+  const values = recording ? ["", "music/take", "wav", "24-bit PCM", "256k"] : [10, ""];
   const node = {
-    comfyClass: mode === "record" ? "TabAudioCaptureRecorder" : "TabAudioCaptureLive",
+    comfyClass: mode === "system" ? "SystemAudioCaptureRecorder" : recording ? "TabAudioCaptureRecorder" : "TabAudioCaptureLive",
     size: [300, 180],
-    outputs: mode === "record" ? [{ name: "audio", type: "AUDIO" }, { name: "saved_wav", type: "STRING", links: [7] }] : [{ name: "audio", type: "AUDIO" }],
+    outputs: recording ? [{ name: "audio", type: "AUDIO" }, { name: "saved_wav", type: "STRING", links: [7] }] : [{ name: "audio", type: "AUDIO" }],
     widgets: names.map((name, index) => ({ name, value: values[index], options: {}, computeSize: () => [300, 20], draw() {} })),
     setDirtyCanvas() {}, setSize(size) { this.size = size; },
     computeSize() { return [300, 40 + this.widgets.reduce((height, widget) => height + Math.max(0, widget.computeSize?.()[1] ?? 20), 0)]; },
@@ -99,8 +101,45 @@ function setup(mode = "record") {
   };
   const find = (name) => node.widgets.find((widget) => widget.name === name);
   extension.nodeCreated(node);
-  return { node, find, state: node.__tabAudioState, navigator, track, sent, requests, captureOptions };
+  return { node, find, state: node.__tabAudioState, navigator, track, videoTrack, stream, sent, requests, captureOptions };
 }
+
+test("system recorder requests entire-screen audio and saves a playable recording", async () => {
+  const { state, captureOptions, find, videoTrack } = setup("system");
+  state.button.callback();
+  await tick();
+  assert.equal(captureOptions[0].video.displaySurface, "monitor");
+  assert.equal(captureOptions[0].systemAudio, "include");
+  assert.equal(captureOptions[0].surfaceSwitching, "exclude");
+  assert.equal(state.active, true);
+  state.button.callback();
+  await tick();
+  assert.equal(videoTrack.stopped, true);
+  assert.equal(find("recording_file").value, "music/take_00001.wav");
+  assert.match(state.player.src, /take_00001.wav/);
+});
+
+test("system recorder rejects tab-only sharing instead of claiming to capture the PC", async () => {
+  const { state, videoTrack, track } = setup("system");
+  videoTrack.getSettings = () => ({ displaySurface: "browser" });
+  state.button.callback();
+  await tick();
+  assert.equal(state.active, false);
+  assert.match(state.statusWidget.textContent, /Select Entire Screen/);
+  assert.equal(track.stopped, true);
+  assert.equal(videoTrack.stopped, true);
+});
+
+test("missing system audio produces an actionable error and releases sharing", async () => {
+  const { state, stream, track, videoTrack } = setup("system");
+  stream.getAudioTracks = () => [];
+  state.button.callback();
+  await tick();
+  assert.equal(state.active, false);
+  assert.match(state.statusWidget.textContent, /No system audio/);
+  assert.equal(track.stopped, true);
+  assert.equal(videoTrack.stopped, true);
+});
 
 test("capture picker offers other Chrome tabs without excluding the ComfyUI tab", async () => {
   const { state, captureOptions } = setup();

@@ -1,4 +1,4 @@
-"""Two ComfyUI AUDIO-output nodes for capturing tab audio from external iframes."""
+"""ComfyUI nodes for capturing browser-tab and system audio."""
 
 import asyncio
 import io
@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 import numpy as np
 from aiohttp import WSMsgType, web
+from comfy_api.latest import io as comfy_io
 from server import PromptServer
 
 from .sessions import M4A_BITRATES, REGISTRY, WAV_CODECS, load_recorded_wav, recording_path
@@ -70,13 +71,44 @@ class RecordedTabAudio:
         return (audio, str(recording_path(recording_file).resolve()))
 
 
+class RecordedSystemAudio(comfy_io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return comfy_io.Schema(
+            node_id="SystemAudioCaptureRecorder",
+            display_name="System Audio Capture · Stop & Save",
+            category="audio/Tab Audio Capture",
+            description="Record all computer playback audio. Share an entire screen with system audio enabled. Requires browser and OS support for system-audio capture.",
+            inputs=[
+                comfy_io.String.Input("recording_file", default="", socketless=True),
+                comfy_io.String.Input("filename_prefix", default="system_audio/system_audio", optional=True,
+                    tooltip="Folder and filename prefix inside ComfyUI/output."),
+                comfy_io.Combo.Input("format", options=["original", "wav", "m4a"], default="wav", optional=True),
+                comfy_io.Combo.Input("wav_bit_depth", options=list(WAV_CODECS), default="24-bit PCM", optional=True, advanced=True),
+                comfy_io.Combo.Input("m4a_bitrate", options=list(M4A_BITRATES), default="256k", optional=True, advanced=True),
+            ],
+            outputs=[comfy_io.Audio.Output("audio"), comfy_io.String.Output("saved_file_path")],
+        )
+
+    @classmethod
+    def fingerprint_inputs(cls, **_kwargs):
+        return float("nan")
+
+    @classmethod
+    def execute(cls, recording_file, **_save_options):
+        audio = load_recorded_wav(recording_file)
+        return comfy_io.NodeOutput(audio, str(recording_path(recording_file).resolve()))
+
+
 NODE_CLASS_MAPPINGS = {
     "TabAudioCaptureLive": LiveTabAudio,
     "TabAudioCaptureRecorder": RecordedTabAudio,
+    "SystemAudioCaptureRecorder": RecordedSystemAudio,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "TabAudioCaptureLive": "Tab Audio Capture · Live",
     "TabAudioCaptureRecorder": "Tab Audio Capture · Stop & Save",
+    "SystemAudioCaptureRecorder": "System Audio Capture · Stop & Save",
 }
 WEB_DIRECTORY = "./web"
 

@@ -16,6 +16,9 @@ import pytest
 from aiohttp import WSMsgType, web
 from aiohttp.test_utils import TestClient, TestServer
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from comfy_api.latest import io as comfy_io
+
 
 @pytest.fixture(scope="module")
 def package():
@@ -73,7 +76,27 @@ def test_two_node_schemas(package):
     assert "recording_file" in module.RecordedTabAudio.INPUT_TYPES()["required"]
 
 
-@pytest.mark.parametrize("filename", ["record_tab_audio.json", "record_tab_audio_with_vhs.json", "live_tab_audio.json"])
+def test_system_audio_v3_schema_and_outputs(package):
+    module, _, _ = package
+    node = module.NODE_CLASS_MAPPINGS["SystemAudioCaptureRecorder"]
+    assert issubclass(node, comfy_io.ComfyNode)
+    assert node.RETURN_TYPES == ["AUDIO", "STRING"]
+    assert node.RETURN_NAMES == ["audio", "saved_file_path"]
+    assert node.INPUT_TYPES()["optional"]["filename_prefix"][1]["default"] == "system_audio/system_audio"
+    session = module.REGISTRY.start(str(uuid.uuid4()), "record", 48000, 2,
+        filename_prefix="system_audio/test", format="wav", wav_bit_depth="24-bit PCM")
+    session.append(samples(4800).tobytes())
+    relative = session.stop()
+    result = node.execute(relative)
+    audio, saved_path = result.args
+    assert Path(saved_path).is_absolute()
+    assert Path(saved_path).is_file()
+    assert audio["sample_rate"] == 48000
+    assert audio["waveform"].shape == (1, 2, 4800)
+    np.testing.assert_allclose(audio["waveform"][0, 0].numpy(), samples(4800)[:, 0], atol=1e-6)
+
+
+@pytest.mark.parametrize("filename", ["record_tab_audio.json", "record_tab_audio_with_vhs.json", "live_tab_audio.json", "record_system_audio.json"])
 def test_example_workflow_connections_and_portable_values(package, filename):
     module, _, root = package
     workflow = json.loads((root / "example" / filename).read_text())
