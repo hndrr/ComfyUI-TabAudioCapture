@@ -1,0 +1,140 @@
+name: Publish to Comfy Registry
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/release-history.json']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Publish a prepared release or synchronize existing notes
+        type: choice
+        options: [publish, sync-notes]
+        default: publish
+      release_sha:
+        description: Optional full prepared release commit SHA on main
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comfy-registry-publish
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  prepare-release:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.mode == 'publish')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.release.outputs.release }}
+      upload: ${{ steps.release.outputs.upload }}
+      sha: ${{ steps.release.outputs.sha }}
+      version: ${{ steps.release.outputs.version }}
+      body: ${{ steps.release.outputs.body }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a commit on main before running release scripts
+        env:
+          RELEASE_SHA_INPUT: ${{ inputs.release_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$RELEASE_SHA_INPUT" ]] && [[ ! "$RELEASE_SHA_INPUT" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+            echo '::error::release_sha must be a full commit SHA.'
+            exit 1
+          fi
+          git merge-base --is-ancestor HEAD origin/main
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Select the immutable release revision
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          RELEASE_SHA_INPUT: ${{ inputs.release_sha }}
+        run: python .github/scripts/release_notes.py prepare
+
+  test-release:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.release == 'true'
+    uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ needs.prepare-release.outputs.sha }}
+
+  publish-node:
+    needs: [prepare-release, test-release]
+    if: needs.prepare-release.outputs.upload == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.sha }}
+          persist-credentials: false
+      - name: Constrain the publishing CLI
+        run: echo 'comfy-cli==1.22.0' > "$RUNNER_TEMP/comfy-cli-constraints.txt"
+      - name: Publish the tested commit
+        uses: Comfy-Org/publish-node-action@d2366e7abb6ab16f3bb03e3520ae25c8cf749bc9
+        env:
+          PIP_CONSTRAINT: ${{ runner.temp }}/comfy-cli-constraints.txt
+          COMFY_NODE_CHANGELOG: ${{ needs.prepare-release.outputs.body }}
+        with:
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          skip_checkout: 'true'
+
+  create-release:
+    needs: [prepare-release, test-release, publish-node]
+    if: >-
+      always() && !cancelled() && needs.prepare-release.outputs.release == 'true' &&
+      needs.test-release.result == 'success' &&
+      (needs.publish-node.result == 'success' || needs.publish-node.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Complete the GitHub Release and shared notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.version }}
+          RELEASE_SHA: ${{ needs.prepare-release.outputs.sha }}
+        run: python .github/scripts/release_notes.py create
+
+  sync-release-notes:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.mode == 'sync-notes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Sync existing Registry versions without uploading packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        run: python .github/scripts/release_notes.py sync
