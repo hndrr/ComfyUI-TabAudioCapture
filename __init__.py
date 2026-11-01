@@ -11,6 +11,8 @@ from aiohttp import WSMsgType, web
 from server import PromptServer
 
 from .sessions import M4A_BITRATES, REGISTRY, WAV_CODECS, load_recorded_wav, recording_path
+from .meter import AudioMeter
+from .range_select import AudioRangeSelect
 
 _LOG = logging.getLogger(__name__)
 
@@ -23,6 +25,11 @@ class LiveTabAudio:
         return {"required": {
             "duration_seconds": ("FLOAT", {"default": 10.0, "min": 0.5, "max": 60.0, "step": 0.5}),
             "snapshot_id": ("STRING", {"default": ""}),
+        }, "optional": {
+            "filename_prefix": ("STRING", {"default": "tab_audio/tab_audio", "tooltip": "Folder and filename prefix inside ComfyUI/output."}),
+            "format": (["original", "wav", "m4a"], {"default": "wav"}),
+            "wav_bit_depth": (list(WAV_CODECS), {"default": "24-bit PCM", "advanced": True}),
+            "m4a_bitrate": (list(M4A_BITRATES), {"default": "256k", "advanced": True}),
         }}
 
     RETURN_TYPES = ("AUDIO",)
@@ -35,7 +42,7 @@ class LiveTabAudio:
     def IS_CHANGED(cls, **_kwargs):
         return float("nan")
 
-    def run(self, duration_seconds, snapshot_id):
+    def run(self, duration_seconds, snapshot_id, **_save_options):
         if not snapshot_id:
             raise ValueError("Live Audio Capture: click Start Capture, share tab or system audio, then Queue Prompt")
         return (REGISTRY.load_snapshot(snapshot_id),)
@@ -73,10 +80,14 @@ class RecordedTabAudio:
 NODE_CLASS_MAPPINGS = {
     "TabAudioCaptureRecorder": RecordedTabAudio,
     "TabAudioCaptureLive": LiveTabAudio,
+    "TabAudioMeter": AudioMeter,
+    "TabAudioRangeSelect": AudioRangeSelect,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "TabAudioCaptureRecorder": "Tab/System Audio Capture",
     "TabAudioCaptureLive": "Tab/System Audio Capture · Live",
+    "TabAudioMeter": "Audio Meter",
+    "TabAudioRangeSelect": "Audio Range Select",
 }
 WEB_DIRECTORY = "./web"
 
@@ -126,6 +137,12 @@ async def tab_audio_websocket(request: web.Request) -> web.StreamResponse:
                         await ws.send_json({"event": "stopped", "saved_file": result})
                         await ws.close()
                         break
+                    elif command == "snapshot" and session is not None:
+                        try:
+                            snapshot_id = await asyncio.to_thread(REGISTRY.snapshot, session.session_id, float(payload.get("seconds", 10.0)))
+                            await ws.send_json({"event": "snapshot", "snapshot_id": snapshot_id})
+                        except (ValueError, TypeError) as exc:
+                            await ws.send_json({"event": "snapshot_error", "message": str(exc)})
                     else:
                         raise ValueError("Invalid command or capture state")
                 except (ValueError, TypeError, KeyError) as exc:
@@ -180,6 +197,25 @@ async def tab_audio_status(request: web.Request) -> web.Response:
         if session.mode != "record":
             raise ValueError("Not a recording session")
         return web.json_response({"saved_file": session.saved_file, "active": session.active})
+    except (ValueError, TypeError, KeyError) as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+
+
+@PromptServer.instance.routes.post("/tab_audio/save_snapshot")
+async def tab_audio_save_snapshot(request: web.Request) -> web.Response:
+    if not _same_origin(request):
+        return web.json_response({"error": "Invalid request Origin"}, status=403)
+    try:
+        body = await request.json()
+        saved_file = await asyncio.to_thread(
+            REGISTRY.save_snapshot,
+            body.get("snapshot_id"),
+            filename_prefix=body.get("filename_prefix", "tab_audio/tab_audio"),
+            format=body.get("format", "wav"),
+            wav_bit_depth=body.get("wav_bit_depth", "24-bit PCM"),
+            m4a_bitrate=body.get("m4a_bitrate", "256k"),
+        )
+        return web.json_response({"saved_file": saved_file})
     except (ValueError, TypeError, KeyError) as exc:
         return web.json_response({"error": str(exc)}, status=400)
 

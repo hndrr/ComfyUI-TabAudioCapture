@@ -242,6 +242,27 @@ class SessionRegistry:
         array = frames.reshape((-1, meta.channels)).T.copy()
         return {"waveform": torch.from_numpy(array).unsqueeze(0), "sample_rate": meta.sample_rate}
 
+    def save_snapshot(self, snapshot_id: str, **save_options) -> str:
+        """Export an immutable Live snapshot using the existing recording writer."""
+        snapshot_id = normalize_id(snapshot_id)
+        with self.lock:
+            meta = self.snapshots.get(snapshot_id)
+        if meta is None or not meta.path.is_file():
+            raise ValueError("Live audio snapshot not found. Capture audio again")
+        session = CaptureSession(str(uuid.uuid4()), "record", meta.sample_rate, meta.channels, **save_options)
+        try:
+            with meta.path.open("rb") as source:
+                while chunk := source.read(4 * meta.channels * 16384):
+                    session.append(chunk)
+            saved_file = session.stop()
+            if not saved_file:
+                raise ValueError("No audio received yet")
+            return saved_file
+        finally:
+            if session.raw_file is not None:
+                session.raw_file.close()
+            session.raw_path.unlink(missing_ok=True)
+
     def prune(self) -> None:
         """Called under registry lock; keep stopped sessions for a while."""
         now = time.time()

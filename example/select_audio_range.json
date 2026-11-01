@@ -1,0 +1,307 @@
+{
+  "id": "79d90a78-bf6a-468a-8a72-b44adad760e6",
+  "revision": 0,
+  "last_node_id": 5,
+  "last_link_id": 3,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "TabAudioCaptureRecorder",
+      "pos": [
+        40,
+        100
+      ],
+      "size": [
+        360,
+        340
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "recording_file",
+          "name": "recording_file",
+          "type": "STRING",
+          "widget": {
+            "name": "recording_file"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "format",
+          "name": "format",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "format"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "wav_bit_depth",
+          "name": "wav_bit_depth",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "wav_bit_depth"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "m4a_bitrate",
+          "name": "m4a_bitrate",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "m4a_bitrate"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            1
+          ]
+        },
+        {
+          "localized_name": "saved_file_path",
+          "name": "saved_file_path",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TabAudioCaptureRecorder"
+      },
+      "widgets_values": [
+        "",
+        "tab_audio/tab_audio",
+        "wav",
+        "24-bit PCM",
+        "256k"
+      ],
+      "widgets_values_named": {
+        "recording_file": "",
+        "filename_prefix": "tab_audio/tab_audio",
+        "format": "wav",
+        "wav_bit_depth": "24-bit PCM",
+        "m4a_bitrate": "256k"
+      }
+    },
+    {
+      "id": 2,
+      "type": "TabAudioMeter",
+      "pos": [
+        460,
+        100
+      ],
+      "size": [
+        290,
+        150
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TabAudioMeter"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 3,
+      "type": "TabAudioRangeSelect",
+      "pos": [
+        810,
+        100
+      ],
+      "size": [
+        400,
+        310
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 2
+        },
+        {
+          "name": "start_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "start_seconds"
+          },
+          "link": null
+        },
+        {
+          "name": "end_seconds",
+          "type": "FLOAT",
+          "widget": {
+            "name": "end_seconds"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TabAudioRangeSelect"
+      },
+      "widgets_values": [
+        0,
+        0
+      ],
+      "widgets_values_named": {
+        "start_seconds": 0,
+        "end_seconds": 0
+      }
+    },
+    {
+      "id": 4,
+      "type": "PreviewAudio",
+      "pos": [
+        1280,
+        100
+      ],
+      "size": [
+        270,
+        88
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 3
+        },
+        {
+          "localized_name": "audioUI",
+          "name": "audioUI",
+          "type": "AUDIO_UI",
+          "widget": {
+            "name": "audioUI"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "audio",
+          "name": "audio",
+          "type": "AUDIO",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PreviewAudio"
+      },
+      "widgets_values": [],
+      "widgets_values_named": {}
+    },
+    {
+      "id": 5,
+      "type": "Note",
+      "pos": [
+        40,
+        520
+      ],
+      "size": [
+        620,
+        200
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "1. Start Recording and share a tab or system playback.\n2. Audio Meter displays the capture levels without running the workflow.\n3. Pause/Resume keeps the same sharing session; Stop & Save finishes the recording.\n4. Click Load Waveform on Audio Range Select to run only through that node.\n5. Drag the desired range (or set start/end seconds), then Run to hear the selected AUDIO.\nEnd 0 means the source end. The recorder saved_file_path still points to the full recording."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "AUDIO"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      0,
+      "AUDIO"
+    ],
+    [
+      3,
+      3,
+      0,
+      4,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        20,
+        70
+      ]
+    }
+  },
+  "version": 0.4
+}

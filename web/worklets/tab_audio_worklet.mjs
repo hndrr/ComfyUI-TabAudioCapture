@@ -5,11 +5,19 @@ class TabAudioPCMProcessor extends AudioWorkletProcessor {
     this.channels = 2;
     this.framesPerChunk = 2048;
     this.currentFrames = 0;
+    this.paused = false;
     this.packet = new Float32Array(this.framesPerChunk * this.channels);
     this.port.onmessage = (event) => {
       if (event.data?.type === "flush") {
         this.sendPacket();
         this.port.postMessage({ type: "flushed" });
+      } else if (event.data?.type === "pause") {
+        this.sendPacket();
+        this.paused = true;
+        this.port.postMessage({ type: "paused" });
+      } else if (event.data?.type === "resume") {
+        this.paused = false;
+        this.port.postMessage({ type: "resumed" });
       }
     };
   }
@@ -26,6 +34,7 @@ class TabAudioPCMProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs) {
+    if (this.paused) return true;
     const input = inputs[0];
     if (!input || !input[0]) return true;
     const left = input[0];
