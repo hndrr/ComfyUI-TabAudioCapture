@@ -2,31 +2,37 @@
 
 Capture playback audio from a Chrome/Chromium tab or the entire PC and output standard ComfyUI `AUDIO`. Tab capture also includes cross-origin iframes without accessing their DOM.
 
-## Choose what to record
+## Tab/System Audio Capture
 
-Both nodes use the same browser sharing dialog:
-
-- **One tab:** select **Chrome Tab**, choose the source tab, and enable **Share tab audio**. The source can be the ComfyUI tab or another tab.
-- **The entire PC:** select **Entire Screen** and enable **Share system audio**. This includes playback from other applications and notification sounds. The browser and OS must support system audio sharing; screen/audio recording permission may be required.
-
-Only audio is sent to ComfyUI and saved. These nodes capture playback audio, not microphone input. Enable audio sharing each time you start; selecting a screen alone does not provide audio.
-
-## Nodes
-
-### Tab/System Audio Capture · Live
-
-- Click `Start Capture` and share tab or system audio. Capture continues independently of workflow execution and retains the latest 120 seconds.
-- Set `duration_seconds` (0.5–60 seconds), then click `Run`. The node snapshots the latest audio when you queue the workflow, so waiting for GPU execution does not change that snapshot.
-- The native audio player supports playback and seeking after a snapshot or stop. The last captured buffer remains available after `Stop Capture`.
-- Output: `audio` (`AUDIO`). The node does not automatically queue or repeat workflows.
-
-### Tab/System Audio Capture · Stop & Save
+This is the main recording node. It records playback audio from a Chrome tab or the entire PC, then saves the recording when you stop.
 
 - Set the save options before `Start Recording`, then share tab or system audio. `Stop & Save` saves the recording and updates the native audio player without running the workflow.
 - `filename_prefix` selects a folder and filename inside `ComfyUI/output`. For example, `music/take` creates `output/music/take_00001.wav`. The default remains `tab_audio/tab_audio`.
 - `format`: `original` preserves captured float32 PCM in WAV; `wav` writes 16/24/32-bit PCM (default: 24-bit); `m4a` writes AAC at 128/192/256/320 kbps (default: 256 kbps). The relevant depth or bitrate control appears under Advanced for the selected format.
 - `Run` outputs `audio` (`AUDIO`) and `saved_file_path` (`STRING`). The path is absolute and connects directly to Video Helper Suite's **Load Audio (Path)** → `audio_file` input.
 - Saved file references remain in workflows and work after restarting ComfyUI. Recordings stop after 10 minutes and preserve the AudioContext sample rate. Saved recordings are not automatically deleted.
+
+## Select the audio source
+
+In **Tab/System Audio Capture**, click `Start Recording`, then choose what to record in Chrome's sharing dialog:
+
+| Audio you want to record | Select in Chrome | Enable |
+| --- | --- | --- |
+| Playback from one tab, including embedded audio | **Chrome Tab**, then the source tab | **Share tab audio** |
+| Playback from all applications on the PC | **Entire Screen**, then the screen | **Share system audio** |
+
+The source tab can be the ComfyUI tab or another tab. Entire-PC recording includes other applications and notification sounds, and requires browser/OS support for system audio sharing. Screen/audio recording permission may be required.
+
+Only audio is sent to ComfyUI and saved. Enable audio sharing each time you start; selecting a screen alone does not provide audio. The captured audio is playback audio rather than microphone input.
+
+## Tab/System Audio Capture · Live (optional)
+
+Use this node when you need the latest N seconds at queue time. It supports the tab and entire-PC audio sources described above.
+
+- Click `Start Capture` and share tab or system audio. Capture continues independently of workflow execution and retains the latest 120 seconds.
+- Set `duration_seconds` (0.5–60 seconds), then click `Run`. The node snapshots the latest audio when you queue the workflow, so waiting for GPU execution does not change that snapshot.
+- The native audio player supports playback and seeking after a snapshot or stop. The last captured buffer remains available after `Stop Capture`.
+- Output: `audio` (`AUDIO`). The node does not automatically queue or repeat workflows.
 
 ## Example workflows
 
@@ -42,10 +48,14 @@ The existing node IDs (`TabAudioCaptureLive`, `TabAudioCaptureRecorder`) and exa
 
 1. Place this repository in `ComfyUI/custom_nodes/ComfyUI-TabAudioCapture`.
 2. Restart ComfyUI and reload the browser.
-3. Search for `Tab/System Audio Capture`, add either node, and connect its `audio` output to an audio input.
+3. Search for `Tab/System Audio Capture`, add the main recording node, and connect its `audio` output to an audio input. Use the optional `Live` node for rolling snapshots.
 4. Start capture and share tab or system audio as described above.
 
-No additional runtime dependencies are required beyond ComfyUI's `torch`, `numpy`, `aiohttp` and `av`.
+Runtime dependencies are listed in `requirements.txt`: `torch`, `numpy`, `aiohttp` and `av`. All four are already required by ComfyUI, with the same version constraints. This node adds no other runtime packages. If any are missing, install them using ComfyUI's Python environment:
+
+```bash
+python -m pip install -r requirements.txt
+```
 
 ## Notes
 

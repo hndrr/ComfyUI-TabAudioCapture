@@ -71,12 +71,12 @@ class RecordedTabAudio:
 
 
 NODE_CLASS_MAPPINGS = {
-    "TabAudioCaptureLive": LiveTabAudio,
     "TabAudioCaptureRecorder": RecordedTabAudio,
+    "TabAudioCaptureLive": LiveTabAudio,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "TabAudioCaptureRecorder": "Tab/System Audio Capture",
     "TabAudioCaptureLive": "Tab/System Audio Capture · Live",
-    "TabAudioCaptureRecorder": "Tab/System Audio Capture · Stop & Save",
 }
 WEB_DIRECTORY = "./web"
 
