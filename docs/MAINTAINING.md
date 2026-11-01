@@ -12,7 +12,7 @@ source .venv/bin/activate
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -r .github/requirements-test.txt
 python -m pytest -q
-node --test tests/test_ui.mjs
+node --test tests/*.mjs
 python -m unittest discover -s .github/tests -v
 ```
 
@@ -28,7 +28,7 @@ comfy --skip-prompt --no-enable-telemetry node pack
 python .github/scripts/check_package.py node.zip
 ```
 
-The CLI packs **Git-tracked files**, so stage newly added files before checking the archive locally. `.comfyignore` excludes CI, tests and this guide. Runtime Python, JavaScript, AudioWorklet, example workflows, README, license and both screenshots must remain in the package. `node.zip` is ignored by Git.
+The CLI packs **Git-tracked files**, so stage newly added files before checking the archive locally. `.comfyignore` excludes CI, tests and this guide. Runtime Python, JavaScript, AudioWorklet, example workflows, README, license and all four node screenshots must remain in the package. `node.zip` is ignored by Git.
 
 ## One-time GitHub setup
 

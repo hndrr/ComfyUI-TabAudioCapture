@@ -38,6 +38,7 @@ function setup(mode = "record") {
       const command = JSON.parse(data).command;
       if (command === "start") this.emit("message", { event: "started" });
       if (command === "stop") this.emit("message", { event: "stopped", saved_file: `music/take_00001.${find("format")?.value === "m4a" ? "m4a" : "wav"}` });
+      if (command === "snapshot") this.emit("message", { event: "snapshot", snapshot_id: "snapshot-123" });
     }
     close() { this.readyState = 3; this.emit("close"); }
   }
@@ -56,6 +57,9 @@ function setup(mode = "record") {
       if (message.type === "flush") {
         sent.push("flush");
         queueMicrotask(() => this.port.onmessage({ data: { type: "flushed" } }));
+      } else if (message.type === "pause" || message.type === "resume") {
+        sent.push(message.type);
+        queueMicrotask(() => this.port.onmessage({ data: { type: message.type === "pause" ? "paused" : "resumed" } }));
       }
     } };
     connect() {}
@@ -66,7 +70,9 @@ function setup(mode = "record") {
     apiURL: (route) => `/api${route}`,
     fetchApi: async (route, options) => {
       requests.push([route, JSON.parse(options.body)]);
-      return { ok: true, json: async () => ({ snapshot_id: "snapshot-123" }) };
+      return { ok: true, json: async () => route === "/tab_audio/save_snapshot"
+        ? { saved_file: `music/latest_00001.${find("format")?.value === "m4a" ? "m4a" : "wav"}` }
+        : { snapshot_id: "snapshot-123" } };
     },
   };
   vm.runInNewContext(source, {
@@ -74,13 +80,14 @@ function setup(mode = "record") {
     document: { createElement: element }, navigator,
     window: { location: { href: "http://localhost:8188/" }, isSecureContext: true,
       setInterval: () => 1, clearInterval() {},
+      clearTimeout,
       setTimeout: (callback, delay) => setTimeout(callback, delay).unref() },
     AudioContext: Context, AudioWorkletNode: Worklet, MediaStream: class { constructor() { return stream; } },
     WebSocket: Socket, URL, URLSearchParams, crypto: { randomUUID: () => "capture-123" },
     console: { error() {} }, requestAnimationFrame: (callback) => callback(),
   });
-  const names = mode === "record" ? ["recording_file", "filename_prefix", "format", "wav_bit_depth", "m4a_bitrate"] : ["duration_seconds", "snapshot_id"];
-  const values = mode === "record" ? ["", "music/take", "wav", "24-bit PCM", "256k"] : [10, ""];
+  const names = mode === "record" ? ["recording_file", "filename_prefix", "format", "wav_bit_depth", "m4a_bitrate"] : ["duration_seconds", "snapshot_id", "filename_prefix", "format", "wav_bit_depth", "m4a_bitrate"];
+  const values = mode === "record" ? ["", "music/take", "wav", "24-bit PCM", "256k"] : [10, "", "music/take", "wav", "24-bit PCM", "256k"];
   const node = {
     comfyClass: mode === "record" ? "TabAudioCaptureRecorder" : "TabAudioCaptureLive",
     size: [300, 180],
@@ -99,7 +106,7 @@ function setup(mode = "record") {
   };
   const find = (name) => node.widgets.find((widget) => widget.name === name);
   extension.nodeCreated(node);
-  return { node, find, state: node.__tabAudioState, navigator, stream, track, sent, requests, captureOptions };
+  return { node, find, state: node.__tabAudioState, navigator, stream, track, sent, requests, captureOptions, api };
 }
 
 for (const mode of ["record", "live"]) {
@@ -250,4 +257,129 @@ test("worklet duplicates mono and does not resend audio after a second flush", (
   const chunks = packets.filter((packet) => packet.type === "chunk");
   assert.equal(chunks.length, 1);
   assert.deepEqual([...new Float32Array(chunks[0].buffer)], [0.25, 0.25, -0.5, -0.5]);
+});
+
+test("worklet pause flushes the boundary, excludes paused audio, and resumes without duplication", () => {
+  const { instance, packets } = processor();
+  instance.process([[new Float32Array([0.1, 0.2])]]);
+  instance.port.onmessage({ data: { type: "pause" } });
+  assert.equal(packets.at(-1).type, "paused");
+  instance.process([[new Float32Array([0.9, 0.8, 0.7])]]);
+  instance.port.onmessage({ data: { type: "flush" } });
+  instance.port.onmessage({ data: { type: "resume" } });
+  assert.equal(packets.at(-1).type, "resumed");
+  instance.process([[new Float32Array([0.3])]]);
+  instance.port.onmessage({ data: { type: "flush" } });
+  const actual = packets.filter((packet) => packet.type === "chunk").flatMap((packet) => [...new Float32Array(packet.buffer)]);
+  assert.deepEqual(actual, [...new Float32Array([0.1, 0.1, 0.2, 0.2, 0.3, 0.3])]);
+});
+
+test("recorder pause retains capture, counts recorded frames, and can save while paused", async () => {
+  const { state, track, sent } = setup();
+  assert.equal(state.pauseButton.disabled, true);
+  state.button.callback();
+  await tick();
+  const context = state.context;
+  const socket = state.socket;
+  state.processor.port.onmessage({ data: { type: "chunk", buffer: new Float32Array(96000).buffer } });
+  assert.equal(state.recordedFrames, 48000);
+  state.pauseButton.callback();
+  state.pauseButton.callback();
+  await tick();
+  assert.equal(state.paused, true);
+  assert.equal(state.pauseButton.label, "Resume Recording");
+  assert.match(state.statusWidget.textContent, /Paused 0:01/);
+  assert.equal(sent.filter((entry) => entry === "pause").length, 1);
+  assert.equal(state.context, context);
+  assert.equal(state.socket, socket);
+  assert.equal(track.stopped, false);
+  state.button.callback();
+  await tick();
+  assert.equal(state.active, false);
+  assert.equal(state.paused, false);
+  assert.equal(state.pauseButton.disabled, true);
+  assert.match(state.player.src, /take_00001.wav/);
+});
+
+test("recorder resume uses the same sharing session", async () => {
+  const { state, captureOptions, track } = setup();
+  state.button.callback();
+  await tick();
+  state.pauseButton.callback();
+  await tick();
+  state.pauseButton.callback();
+  await tick();
+  assert.equal(state.paused, false);
+  assert.equal(state.pauseButton.label, "Pause Recording");
+  assert.equal(captureOptions.length, 1);
+  assert.equal(track.stopped, false);
+  state.button.callback();
+  await tick();
+});
+
+for (const format of ["original", "wav", "m4a"]) {
+  test(`live ${format}: freeze before encoding and continue capture after saving`, async () => {
+    const { state, find, sent, requests, track } = setup("live");
+    assert.equal(state.pauseButton, null);
+    assert.equal(state.saveButton.disabled, true);
+    find("format").value = format;
+    find("duration_seconds").value = 7.5;
+    state.button.callback();
+    await tick();
+    const context = state.context;
+    state.saveButton.callback();
+    state.saveButton.callback();
+    await tick();
+    assert.equal(sent[1], "flush");
+    assert.deepEqual(JSON.parse(sent[2]), { command: "snapshot", seconds: 7.5 });
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0][0], "/tab_audio/save_snapshot");
+    assert.equal(requests[0][1].format, format);
+    assert.equal(requests[0][1].snapshot_id, "snapshot-123");
+    assert.equal(state.active, true);
+    assert.equal(state.context, context);
+    assert.equal(track.stopped, false);
+    assert.equal(state.saving, false);
+    assert.match(state.player.src, new RegExp(`latest_00001.${format === "m4a" ? "m4a" : "wav"}`));
+    const pcm = new Float32Array([0.4, 0.5]).buffer;
+    state.processor.port.onmessage({ data: { type: "chunk", buffer: pcm } });
+    assert.equal(sent.at(-1), pcm);
+    state.button.callback();
+    await tick();
+  });
+}
+
+test("live save errors preserve capture and allow retry", async () => {
+  const { state, api, track } = setup("live");
+  state.button.callback();
+  await tick();
+  const fetchApi = api.fetchApi;
+  api.fetchApi = async () => ({ ok: false, status: 400, json: async () => ({ error: "Invalid save options" }) });
+  state.saveButton.callback();
+  await tick();
+  assert.equal(state.active, true);
+  assert.equal(track.stopped, false);
+  assert.equal(state.saving, false);
+  assert.match(state.statusWidget.textContent, /Invalid save options/);
+  api.fetchApi = fetchApi;
+  state.saveButton.callback();
+  await tick();
+  assert.match(state.statusWidget.textContent, /Saved:/);
+  state.button.callback();
+  await tick();
+});
+
+test("live can save the retained buffer after stopping", async () => {
+  const { state, requests } = setup("live");
+  state.button.callback();
+  await tick();
+  state.button.callback();
+  await tick();
+  assert.equal(state.saveButton.disabled, false);
+  state.saveButton.callback();
+  await tick();
+  assert.equal(requests.at(-2)[0], "/tab_audio/snapshot");
+  assert.equal(requests.at(-1)[0], "/tab_audio/save_snapshot");
+  assert.equal(state.active, false);
+  assert.match(state.player.src, /latest_00001.wav/);
 });

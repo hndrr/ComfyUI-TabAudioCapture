@@ -1,4 +1,4 @@
-# ComfyUI Tab/System Audio Capture
+# ComfyUI-TabAudioCapture
 
 [![Tests](https://github.com/hndrr/ComfyUI-TabAudioCapture/actions/workflows/tests.yml/badge.svg)](https://github.com/hndrr/ComfyUI-TabAudioCapture/actions/workflows/tests.yml)
 
@@ -8,9 +8,10 @@ Capture playback audio from a Chrome/Chromium tab or the entire PC and output st
 
 This is the main recording node. It records playback audio from a Chrome tab or the entire PC, then saves the recording when you stop.
 
-![Main recording node with save controls and audio preview](docs/images/recorder.jpg)
+![Recorder with pause/resume, save controls and audio preview](docs/images/recorder.jpg)
 
 - Set the save options before `Start Recording`, then share tab or system audio. `Stop & Save` saves the recording and updates the native audio player without running the workflow.
+- `Pause Recording` / `Resume Recording` keeps the same sharing session and joins only the recorded portions. You can use `Stop & Save` while paused. The timer and 10-minute limit count recorded audio, excluding pauses.
 - `filename_prefix` selects a folder and filename inside `ComfyUI/output`. For example, `music/take` creates `output/music/take_00001.wav`. The default remains `tab_audio/tab_audio`.
 - `format`: `original` preserves captured float32 PCM in WAV; `wav` writes 16/24/32-bit PCM (default: 24-bit); `m4a` writes AAC at 128/192/256/320 kbps (default: 256 kbps). The relevant depth or bitrate control appears under Advanced for the selected format.
 - `Run` outputs `audio` (`AUDIO`) and `saved_file_path` (`STRING`). The path is absolute and connects directly to Video Helper Suite's **Load Audio (Path)** → `audio_file` input.
@@ -33,12 +34,33 @@ Only audio is sent to ComfyUI and saved. Enable audio sharing each time you star
 
 Use this node when you need the latest N seconds at queue time. It supports the tab and entire-PC audio sources described above.
 
-![Live node with snapshot duration and capture controls](docs/images/live.jpg)
+![Live node with snapshot duration, save settings and Save Latest Audio](docs/images/live.jpg)
 
 - Click `Start Capture` and share tab or system audio. Capture continues independently of workflow execution and retains the latest 120 seconds.
 - Set `duration_seconds` (0.5–60 seconds), then click `Run`. The node snapshots the latest audio when you queue the workflow, so waiting for GPU execution does not change that snapshot.
+- `Save Latest Audio` freezes that many seconds and saves them without stopping capture or running the workflow. It uses the same filename prefix, Original/WAV/M4A formats, depth and bitrate settings as the recorder. The default is 24-bit WAV. You can save repeatedly, including after capture has stopped; each save gets a new numbered filename.
 - The native audio player supports playback and seeking after a snapshot or stop. The last captured buffer remains available after `Stop Capture`.
 - Output: `audio` (`AUDIO`). The node does not automatically queue or repeat workflows.
+
+## Audio Meter
+
+![Independent Audio Meter displaying left and right capture levels](docs/images/meter.jpg)
+
+Connect Recorder or Live → **Audio Meter** using `AUDIO`. It displays left/right peak levels in dBFS while capture is running, without queueing the workflow. Mono capture is shown on both channels. Both channels below −60 dBFS for two seconds display `Silence`; disconnected or inactive captures display a waiting state.
+
+The meter uses its own browser analysis branch and keeps working while the recorder is paused. Removing it does not stop capture. Its `audio` output passes the input through unchanged. Place it directly after Recorder/Live (or through a Reroute or another Meter); after an audio transform it cannot monitor that transform's output in real time.
+
+## Audio Range Select
+
+![Independent Audio Range Select with a selected waveform interval](docs/images/range_select.jpg)
+
+Connect any standard `AUDIO` → **Audio Range Select** → your downstream audio node.
+
+1. Click `Load Waveform` to execute only through this node and display the full source waveform.
+2. Drag across the waveform to select a range, drag either edge to adjust it, or enter `start_seconds` / `end_seconds`. End `0` means the source end; `Reset Full Range` restores the full audio.
+3. Run the workflow. The `audio` output contains only that range, with the original sample rate, channels and batches. No audio file is created or modified.
+
+The waveform displays the first batch; the same time range applies to every batch. Bounds are measured from the start of the current input. For a stable selection from Live, use `Stop Capture` before loading the waveform; continuing capture supplies a new snapshot on each Run. The recorder's `saved_file_path` continues to refer to its complete saved recording.
 
 ## Example workflows
 
@@ -47,6 +69,7 @@ Drag a JSON file into ComfyUI. Choose the audio source when starting capture.
 - [Record, save and inspect outputs](example/record_tab_audio.json): recorder → Preview Audio and saved path display.
 - [Load the saved path](example/record_tab_audio_with_vhs.json): `saved_file_path` → Load Audio (Path) → Preview Audio. Requires Video Helper Suite.
 - [Snapshot the latest audio](example/live_tab_audio.json): Live → Preview Audio.
+- [Monitor and select a range](example/select_audio_range.json): recorder → Audio Meter → Audio Range Select → Preview Audio.
 
 The existing node IDs (`TabAudioCaptureLive`, `TabAudioCaptureRecorder`) and example filenames are unchanged so existing workflows remain compatible.
 
@@ -91,10 +114,10 @@ Run in this node directory using a Python environment with ComfyUI's dependencie
 
 ```bash
 python -m pytest -q
-node --test tests/test_ui.mjs
+node --test tests/*.mjs
 ```
 
-The tests cover audio formats, output paths, HTTP/WebSocket behavior, capture controls and player updates. Browser sharing dialogs are mocked; live browser recording must be verified separately. Install `pytest` only in your development environment if needed.
+The tests cover audio formats, output paths, HTTP/WebSocket behavior, pause/resume, Live saves, independent meter cleanup, waveform selection and player updates. Browser sharing dialogs are mocked; live browser recording must be verified separately. Install `pytest` only in your development environment if needed.
 
 GitHub Actions runs these tests, release-tool tests and a Registry package check on pull requests and pushes to `main`. See the [maintainer guide](docs/MAINTAINING.md) for development setup, release preparation, required Secrets and recovery steps.
 
