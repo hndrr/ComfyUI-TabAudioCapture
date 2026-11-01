@@ -24,6 +24,7 @@ MAX_SNAPSHOT_SECONDS = 60
 SNAPSHOT_TTL_SECONDS = 24 * 60 * 60
 WAV_CODECS = {"16-bit PCM": "pcm_s16le", "24-bit PCM": "pcm_s24le", "32-bit PCM": "pcm_s32le"}
 M4A_BITRATES = {"128k": 128000, "192k": 192000, "256k": 256000, "320k": 320000}
+_SAVE_LOCK = threading.Lock()
 
 
 def _capture_temp_dir() -> Path:
@@ -163,10 +164,7 @@ class CaptureSession:
             folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
                 self.filename_prefix, folder_paths.get_output_directory())
             extension = "m4a" if self.format == "m4a" else "wav"
-            name = f"{filename.replace('%batch_num%', '0')}_{counter:05}.{extension}"
-            relative_file = (Path(subfolder) / name).as_posix()
-            final_path = recording_path(relative_file)
-            partial = Path(folder) / f".{name}.{self.session_id}.part"
+            partial = Path(folder) / f".tab_audio_{self.session_id}.part"
             codec = "pcm_f32le" if self.format == "original" else WAV_CODECS[self.wav_bit_depth] if self.format == "wav" else "aac"
             layout = "mono" if self.channels == 1 else "stereo"
             try:
@@ -188,8 +186,16 @@ class CaptureSession:
                                 dest.mux(packet)
                         for packet in stream.encode(None):
                             dest.mux(packet)
-                os.replace(partial, final_path)
-                self.saved_file = relative_file
+                with _SAVE_LOCK:
+                    while True:
+                        name = f"{filename.replace('%batch_num%', '0')}_{counter:05}.{extension}"
+                        relative_file = (Path(subfolder) / name).as_posix()
+                        final_path = recording_path(relative_file)
+                        if not final_path.exists():
+                            break
+                        counter += 1
+                    os.replace(partial, final_path)
+                    self.saved_file = relative_file
             finally:
                 partial.unlink(missing_ok=True)
                 self.raw_path.unlink(missing_ok=True)
@@ -241,6 +247,31 @@ class SessionRegistry:
             raise ValueError("Live audio snapshot is empty or corrupted")
         array = frames.reshape((-1, meta.channels)).T.copy()
         return {"waveform": torch.from_numpy(array).unsqueeze(0), "sample_rate": meta.sample_rate}
+
+    def save_snapshot(self, snapshot_id: str, **save_options) -> str:
+        """Export an immutable Live snapshot using the existing recording writer."""
+        snapshot_id = normalize_id(snapshot_id)
+        with self.lock:
+            meta = self.snapshots.get(snapshot_id)
+        if meta is None or not meta.path.is_file():
+            raise ValueError("Live audio snapshot not found. Capture audio again")
+        session = CaptureSession(str(uuid.uuid4()), "record", meta.sample_rate, meta.channels, **save_options)
+        try:
+            try:
+                snapshot_file = meta.path.open("rb")
+            except FileNotFoundError as exc:
+                raise ValueError("Live audio snapshot expired. Capture audio again") from exc
+            with snapshot_file as source:
+                while chunk := source.read(4 * meta.channels * 16384):
+                    session.append(chunk)
+            saved_file = session.stop()
+            if not saved_file:
+                raise ValueError("No audio received yet")
+            return saved_file
+        finally:
+            if session.raw_file is not None:
+                session.raw_file.close()
+            session.raw_path.unlink(missing_ok=True)
 
     def prune(self) -> None:
         """Called under registry lock; keep stopped sessions for a while."""
