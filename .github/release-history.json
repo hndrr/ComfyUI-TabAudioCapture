@@ -1,6 +1,6 @@
 {
   "releases": {
-    "0.1.0": {
+    "1.0.0": {
       "body": "- Added Tab/System Audio Capture nodes to record Chrome tab or supported system playback audio as standard ComfyUI `AUDIO`, with saved recordings available to preview and reuse.\n- Added Live capture for queue-time snapshots of recent audio, plus recording options for original PCM, configurable WAV, or AAC M4A formats."
     }
   }

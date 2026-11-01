@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Version increment (the first release keeps 0.1.0)
+        description: Version increment, including the first release
         type: choice
         options: [patch, minor, major]
         default: patch
