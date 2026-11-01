@@ -46,14 +46,14 @@ Under **Settings → Actions → General → Workflow permissions**, enable **Al
 
 ## Prepare the first release
 
-The repository starts with `project.version = "0.1.0"` and an empty release history. Merging the tooling setup does **not** publish a package.
+Preparation applies the selected version increment even when release history is empty. Merging the tooling setup with an empty history does **not** publish a package.
 
 1. Open **Actions → Prepare release PR → Run workflow** and select `main`.
-2. Keep the default `bump`. The first release retains `0.1.0` regardless of the bump selection.
+2. Select the desired `bump`. Starting from `0.1.0`, choose `major` for `1.0.0`, `minor` for `0.2.0`, or `patch` for `0.1.1`. No earlier release tag is required for this first increment.
 3. Leave `release_notes` empty for a Copilot summary, or provide a concise English Markdown summary. Copilot summarizes the initial tracked source without requiring an earlier tag.
-4. Review the generated `codex/release/0.1.0` PR. Edit the version's `body` in `.github/release-history.json` to correct the notes; editing only the PR description does not change published notes.
+4. Review the generated release PR. Edit the version's `body` in `.github/release-history.json` to correct the notes; editing only the PR description does not change published notes.
 5. Confirm the common CI and **Release preparation validation** check pass, then merge the PR as a maintainer.
-6. Watch **Publish to Comfy Registry**. It retests the final release commit, publishes the archive, and creates tag `v0.1.0` and the GitHub Release with the same summary.
+6. Watch **Publish to Comfy Registry**. It retests the final release commit, publishes the archive, and creates the matching version tag and GitHub Release with the same summary (`v1.0.0` for the first major release).
 
 The preparation workflow explicitly calls common CI on the PR merge revision and reports the result on its head. If GitHub also presents an approval prompt for bot-created PR workflows, approve it when those separate checks are required by repository rules. Release preparation does not merge its own PR.
 
