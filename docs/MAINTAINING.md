@@ -92,6 +92,5 @@ Synchronization can also restore missing GitHub Releases for available Registry 
 2. In a separate ComfyUI installation, run `comfy node install tab-audio-capture`, restart ComfyUI and reload the browser.
 3. Load each example workflow. Confirm the main recorder and optional Live node are available and the AudioWorklet loads.
 4. Manually record tab playback, stop and preview it, then run the workflow. Check `audio` and the absolute `saved_file_path`. Check Live queue-time snapshots and available output formats. Verify system audio only on a browser/OS combination that supports it.
-5. After the first successful publication, update the README's first-release status to link to the Registry package.
 
 CI mocks browser sharing dialogs and cannot prove actual browser/OS audio capture support. The README screenshots show the real node controls; update them when those controls change.

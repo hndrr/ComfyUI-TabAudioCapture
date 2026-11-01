@@ -75,8 +75,6 @@ The existing node IDs (`TabAudioCaptureLive`, `TabAudioCaptureRecorder`) and exa
 
 ## Installation
 
-### Manual installation
-
 1. Place this repository in `ComfyUI/custom_nodes/ComfyUI-TabAudioCapture`.
 2. Restart ComfyUI and reload the browser.
 3. Search for `Tab/System Audio Capture`, add the main recording node, and connect its `audio` output to an audio input. Use the optional `Live` node for rolling snapshots.
@@ -87,16 +85,6 @@ Runtime dependencies are listed in `requirements.txt`: `torch`, `numpy`, `aiohtt
 ```bash
 python -m pip install -r requirements.txt
 ```
-
-### Comfy Registry
-
-The Registry package ID is `tab-audio-capture` (publisher: `hndr`). The first release is being prepared; use manual installation until `1.0.0` is published. After publication, run this from your Comfy CLI environment:
-
-```bash
-comfy node install tab-audio-capture
-```
-
-Restart ComfyUI and reload the browser after installation.
 
 ## Notes
 
@@ -119,7 +107,7 @@ node --test tests/*.mjs
 
 The tests cover audio formats, output paths, HTTP/WebSocket behavior, pause/resume, Live saves, independent meter cleanup, waveform selection and player updates. Browser sharing dialogs are mocked; live browser recording must be verified separately. Install `pytest` only in your development environment if needed.
 
-GitHub Actions runs these tests, release-tool tests and a Registry package check on pull requests and pushes to `main`. See the [maintainer guide](docs/MAINTAINING.md) for development setup, release preparation, required Secrets and recovery steps.
+GitHub Actions runs these tests on pull requests and pushes to `main`. See the [maintainer guide](docs/MAINTAINING.md) for development and release procedures.
 
 ## License
 
