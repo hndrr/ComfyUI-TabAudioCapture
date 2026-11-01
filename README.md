@@ -67,7 +67,7 @@ python -m pip install -r requirements.txt
 
 ### Comfy Registry
 
-The Registry package ID is `tab-audio-capture` (publisher: `hndr`). The first release is being prepared; use manual installation until `0.1.0` is published. After publication, run this from your Comfy CLI environment:
+The Registry package ID is `tab-audio-capture` (publisher: `hndr`). The first release is being prepared; use manual installation until `1.0.0` is published. After publication, run this from your Comfy CLI environment:
 
 ```bash
 comfy node install tab-audio-capture
