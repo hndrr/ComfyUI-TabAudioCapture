@@ -1,4 +1,4 @@
-"""Two ComfyUI AUDIO-output nodes for capturing tab audio from external iframes."""
+"""ComfyUI AUDIO-output nodes for capturing tab and system playback audio."""
 
 import asyncio
 import io
@@ -29,7 +29,7 @@ class LiveTabAudio:
     RETURN_NAMES = ("audio",)
     FUNCTION = "run"
     CATEGORY = "audio/Tab Audio Capture"
-    DESCRIPTION = "Capture audio from a selected Chrome tab continuously. On Queue, snapshot the most recent N seconds and output standard AUDIO."
+    DESCRIPTION = "Capture playback audio from a Chrome tab or the entire PC. Choose Chrome Tab + Share tab audio, or Entire Screen + Share system audio. System audio requires browser/OS support. On Queue, snapshot the most recent N seconds as AUDIO."
 
     @classmethod
     def IS_CHANGED(cls, **_kwargs):
@@ -37,7 +37,7 @@ class LiveTabAudio:
 
     def run(self, duration_seconds, snapshot_id):
         if not snapshot_id:
-            raise ValueError("Live Tab Audio: click Start Capture, play audio, then Queue Prompt")
+            raise ValueError("Live Audio Capture: click Start Capture, share tab or system audio, then Queue Prompt")
         return (REGISTRY.load_snapshot(snapshot_id),)
 
 
@@ -59,7 +59,7 @@ class RecordedTabAudio:
     RETURN_NAMES = ("audio", "saved_file_path")
     FUNCTION = "run"
     CATEGORY = "audio/Tab Audio Capture"
-    DESCRIPTION = "Capture tab audio until Stop & Save. Choose an output folder, Original/WAV/M4A and preview the saved audio before Queue. Save settings apply when recording starts."
+    DESCRIPTION = "Record playback audio from a Chrome tab or the entire PC until Stop & Save. Choose Chrome Tab + Share tab audio, or Entire Screen + Share system audio. System audio requires browser/OS support. Set the output folder and Original/WAV/M4A format before recording; preview the saved audio before Queue."
 
     @classmethod
     def IS_CHANGED(cls, **_kwargs):
@@ -75,8 +75,8 @@ NODE_CLASS_MAPPINGS = {
     "TabAudioCaptureRecorder": RecordedTabAudio,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "TabAudioCaptureLive": "Tab Audio Capture · Live",
-    "TabAudioCaptureRecorder": "Tab Audio Capture · Stop & Save",
+    "TabAudioCaptureLive": "Tab/System Audio Capture · Live",
+    "TabAudioCaptureRecorder": "Tab/System Audio Capture · Stop & Save",
 }
 WEB_DIRECTORY = "./web"
 

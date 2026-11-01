@@ -1,84 +1,69 @@
-# ComfyUI Tab Audio Capture
+# ComfyUI Tab/System Audio Capture
 
-外部サイトの埋め込み `iframe` で再生されている音声を、**Chrome / Chromium のタブ音声キャプチャ**を利用して ComfyUI の `AUDIO` 出力に変換するカスタムノードです。iframe内部の DOM にはアクセスしません。
+Capture playback audio from a Chrome/Chromium tab or the entire PC and output standard ComfyUI `AUDIO`. Tab capture also includes cross-origin iframes without accessing their DOM.
 
-## ノード2種類
+## Choose what to record
 
-### Tab Audio Capture · Live
+Both nodes use the same browser sharing dialog:
 
-- `Start Capture` をクリックして **録音したいChromeタブ**を選び、**タブの音声も共有**を有効にする。ComfyUIとは別のタブも選べます。
-- 録音はワークフロー実行と無関係に継続。最新120秒分を保持します。
-- `duration_seconds`（0.5～60秒）で切り出す長さを設定。
-- `Queue Prompt` を押した**時点**で直近の音声のスナップショットを作成し、実行開始後に `AUDIO` から参照できるようにします。GPU実行待ちが長くても、Queue時の音声は変わりません。
-- `Stop Capture` の後も、最後に保持した音声については Queue を実行できます。
-- 標準の Record Audio と同じ再生バーを表示。停止時と Queue 時に切り出した音声を再生・シークできます。
-- 毎回の自動Queueやワークフローの連続再実行は**行いません**。
+- **One tab:** select **Chrome Tab**, choose the source tab, and enable **Share tab audio**. The source can be the ComfyUI tab or another tab.
+- **The entire PC:** select **Entire Screen** and enable **Share system audio**. This includes playback from other applications and notification sounds. The browser and OS must support system audio sharing; screen/audio recording permission may be required.
 
-接続例：`Tab Audio Capture · Live (AUDIO)` → `動画生成ノードのaudio_ref`。
+Only audio is sent to ComfyUI and saved. These nodes capture playback audio, not microphone input. Enable audio sharing each time you start; selecting a screen alone does not provide audio.
 
-### Tab Audio Capture · Stop & Save
+## Nodes
 
-- `Start Recording` をクリックし、録音したいChromeタブの音声を共有。ComfyUIのタブでも別タブでも録音できます。
-- 標準の Record Audio と同じ再生バーと、開始／停止を切り替える1つのボタンを表示します。`Stop & Save` で録音を終了し、**Queueなしで保存・再生**できます。
-- 保存設定は GeminiTools の Save Audio と同じ標準ウィジェットです。録音開始前に設定してください。
-- `filename_prefix` で `ComfyUI/output` 内のフォルダとファイル名を指定します。例：`music/take` → `output/music/take_00001.wav`。既定値は `tab_audio/tab_audio`。
-- `format` は `original`（受信した32bit float PCMをそのままWAVへ保存）、`wav`（16/24/32bit PCM、既定24bit）、`m4a`（AAC、128/192/256/320kbps、既定256kbps）。WAVのビット深度とM4Aのビットレートは、選択した形式の項目のみ Advanced に表示します。
-- `Queue Prompt` で保存済み音声を `audio`（AUDIO）出力として渡します。2番目の `saved_file_path`（STRING）は、保存したWAV/M4Aの絶対パスを返し、Video Helper Suite の `Load Audio (Path)` の `audio_file` 入力に直接接続できます。
-- 保存済みファイルへの参照はワークフローにも残り、再起動後も使用できます。録音時間の上限は10分で、AudioContextのサンプルレートを維持します。
+### Tab/System Audio Capture · Live
 
-接続例：`Tab Audio Capture · Stop & Save (AUDIO)` → `動画生成ノードのaudio_ref`。
+- Click `Start Capture` and share tab or system audio. Capture continues independently of workflow execution and retains the latest 120 seconds.
+- Set `duration_seconds` (0.5–60 seconds), then click `Run`. The node snapshots the latest audio when you queue the workflow, so waiting for GPU execution does not change that snapshot.
+- The native audio player supports playback and seeking after a snapshot or stop. The last captured buffer remains available after `Stop Capture`.
+- Output: `audio` (`AUDIO`). The node does not automatically queue or repeat workflows.
 
-## サンプルワークフロー
+### Tab/System Audio Capture · Stop & Save
 
-JSONをComfyUIへドラッグ＆ドロップして開いてください。録音対象は開始時に選択します。
+- Set the save options before `Start Recording`, then share tab or system audio. `Stop & Save` saves the recording and updates the native audio player without running the workflow.
+- `filename_prefix` selects a folder and filename inside `ComfyUI/output`. For example, `music/take` creates `output/music/take_00001.wav`. The default remains `tab_audio/tab_audio`.
+- `format`: `original` preserves captured float32 PCM in WAV; `wav` writes 16/24/32-bit PCM (default: 24-bit); `m4a` writes AAC at 128/192/256/320 kbps (default: 256 kbps). The relevant depth or bitrate control appears under Advanced for the selected format.
+- `Run` outputs `audio` (`AUDIO`) and `saved_file_path` (`STRING`). The path is absolute and connects directly to Video Helper Suite's **Load Audio (Path)** → `audio_file` input.
+- Saved file references remain in workflows and work after restarting ComfyUI. Recordings stop after 10 minutes and preserve the AudioContext sample rate. Saved recordings are not automatically deleted.
 
-- [録音・保存・出力確認](example/record_tab_audio.json)：標準ノードで `audio` と `saved_file_path` を確認。
-- [保存パスからの読み込み](example/record_tab_audio_with_vhs.json)：`saved_file_path` → `Load Audio (Path)` → `Preview Audio`。Video Helper Suite が必要です。
-- [Liveで直近N秒を切り出す](example/live_tab_audio.json)：Live → Preview Audio。
+## Example workflows
 
-## インストール
+Drag a JSON file into ComfyUI. Choose the audio source when starting capture.
 
-1. ZIPを展開して、ディレクトリを以下のように配置してください。
+- [Record, save and inspect outputs](example/record_tab_audio.json): recorder → Preview Audio and saved path display.
+- [Load the saved path](example/record_tab_audio_with_vhs.json): `saved_file_path` → Load Audio (Path) → Preview Audio. Requires Video Helper Suite.
+- [Snapshot the latest audio](example/live_tab_audio.json): Live → Preview Audio.
 
-   ```text
-   ComfyUI/
-     custom_nodes/
-       ComfyUI-TabAudioCapture/
-         __init__.py
-         sessions.py
-         web/
-           tab_audio_capture.js
-           worklets/
-             tab_audio_worklet.mjs
-   ```
+The existing node IDs (`TabAudioCaptureLive`, `TabAudioCaptureRecorder`) and example filenames are unchanged so existing workflows remain compatible.
 
-2. **ComfyUIを再起動**し、ブラウザをリロードしてください。
-3. ノード検索で `Tab Audio Capture` を入力すると、上記2種類が表示されます。
-4. 利用したいノードをグラフに追加し、`AUDIO` 出力を既存の音声入力ノードにつないでください。
-5. ノード内の `Start` を押し、Chromeの共有ダイアログで **「Chromeタブ」→「録音したいタブ」→「タブの音声も共有」** の順に選択してください。
+## Installation
 
-追加の `pip install` は基本的に不要です（ComfyUIが利用している `torch`、`numpy`、`aiohttp`、`av` を利用）。
+1. Place this repository in `ComfyUI/custom_nodes/ComfyUI-TabAudioCapture`.
+2. Restart ComfyUI and reload the browser.
+3. Search for `Tab/System Audio Capture`, add either node, and connect its `audio` output to an audio input.
+4. Start capture and share tab or system audio as described above.
 
-## 技術仕様・注意点
+No additional runtime dependencies are required beyond ComfyUI's `torch`, `numpy`, `aiohttp` and `av`.
 
-- Chrome / Chromiumを想定。マイク入力ではなく**タブ内で再生中の音声**を取得します。タブ内の他の音も混合され、外部iframeだけを個別分離することはできません。
-- `getDisplayMedia()` の仕様上、録音を開始するたびに共有先の選択と許可が必要です。HTTPの場合は `localhost`、その他はHTTPSが必要です。
-- ブラウザでのキャプチャは `AudioWorklet` → 32bit float PCM → WebSocket → ComfyUI Python サーバーです。出力は `[1, channels, samples]` の `waveform` と `sample_rate` を持つ標準 `AUDIO` 辞書です。
-- **通常の `AUDIO` ソケットは連続ストリームではありません。** LiveノードはQueue時の固定スナップショット、保存ノードはStop時に完成した音声を返す仕組みです。動画生成実行中に入力を更新するものではありません。
-- Liveの音声はメモリ内のリングバッファで最大120秒、Queue時のスナップショットは一時ディスクファイルとして保持。再起動後は失われます。古いスナップショットは次の録音開始時などに、24時間経過したものを掃除します。
-- Stop & Saveは一時ディスクにPCMを書き込み、停止時に選択した形式で保存します。保存済みファイルは自動削除しません。10分上限で停止すると、その時点までの録音を保存します。
-- ネットワーク遅延が大きくWebSocket送信待ちが4 MiBを超えると、自動停止する安全策があります。長時間のネットワーク断やタブを閉じた場合、録音が途切れることがあります。
-- ローカルのComfyUIとChromeを想定した実装です。ComfyUI Cloud等のカスタムノード導入が制限される環境では使用できません。HTTPSリバースプロキシ環境ではWebSocketのアップグレードが必要です。
-- 音源を再生するサイト側がOS/ブラウザのタブキャプチャを妨げる場合、その音声は取得できません。
+## Notes
 
-## テスト
+- Chrome/Chromium is the intended browser. Audio capture requires HTTPS or a localhost connection. Browser and OS support determines whether entire-PC audio is available.
+- Tab capture mixes all playback within the selected tab; it cannot isolate one iframe. Protected playback or source restrictions may prevent capture.
+- Audio passes through AudioWorklet → float32 PCM → WebSocket → ComfyUI. The native `AUDIO` value contains `waveform` shaped `[1, channels, samples]` and `sample_rate`.
+- `AUDIO` sockets carry fixed snapshots or completed recordings, not a continuous stream that updates an already-running generation.
+- Live snapshots use temporary disk files and do not survive a server restart. Snapshots older than 24 hours are cleaned up when starting a new session.
+- Capture stops if pending WebSocket data exceeds 4 MiB. Network interruptions or closing the browser tab may interrupt recording. HTTPS reverse proxies must support WebSocket upgrades.
+- Intended for a local ComfyUI installation and browser. Environments that restrict custom nodes may not support these nodes.
 
-Python単体/HTTP・WebSocketテストと、録音操作・プレーヤー更新を確認するJavaScriptテストを含みます。ブラウザとComfyUIサーバーはモックするため、実機のComfyUIプロセスを起動する必要はありません。
+## Tests
+
+Run in this node directory using a Python environment with ComfyUI's dependencies:
 
 ```bash
-cd ComfyUI/custom_nodes/ComfyUI-TabAudioCapture
 python -m pytest -q
 node --test tests/test_ui.mjs
 ```
 
-`pytest` がなければ開発用環境にのみ導入してください。実際のChrome共有ダイアログを含むComfyUI UI上での録音検証は別途必要です。
+The tests cover audio formats, output paths, HTTP/WebSocket behavior, capture controls and player updates. Browser sharing dialogs are mocked; live browser recording must be verified separately. Install `pytest` only in your development environment if needed.

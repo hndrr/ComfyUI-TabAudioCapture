@@ -327,8 +327,8 @@
         470
       ],
       "size": [
-        400,
-        160
+        470,
+        200
       ],
       "flags": {},
       "order": 5,
@@ -337,7 +337,7 @@
       "outputs": [],
       "properties": {},
       "widgets_values": [
-        "1. 保存先と形式を設定して Start Recording。\n2. Chromeタブから録音したいタブを選び、タブの音声も共有。\n3. 音を再生し、Stop & Save。ノード内で再生できます。\n4. Runで audio と saved_file_path を確認。\nVideo Helper Suite が必要です。パスを audio_file へ直接渡します。"
+        "1. Set the output folder and format, then Start Recording.\n2. Choose Chrome Tab + Share tab audio, or Entire Screen + Share system audio.\n3. Play audio, then Stop & Save. Use the player to preview it.\n4. Run to inspect audio and saved_file_path.\nRequires Video Helper Suite. Connect saved_file_path directly to audio_file.\nSystem audio requires browser/OS support."
       ],
       "color": "#432",
       "bgcolor": "#653"
