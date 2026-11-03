@@ -1,1 +1,1 @@
-comfy-cli==1.22.0
+comfy-cli==1.25.0
