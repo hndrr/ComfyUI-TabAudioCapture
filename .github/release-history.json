@@ -5,6 +5,9 @@
     },
     "1.1.0": {
       "body": "- Recorder now supports pause/resume without ending the sharing session; paused time is excluded from the recording timer and 10-minute limit.\n- Live capture can save the latest audio without stopping capture or running the workflow, using configurable Original, WAV, or M4A settings. Saved recordings receive unused numbered filenames to avoid overwriting existing files.\n- Added an Audio Meter for live left/right levels and an Audio Range Select node to preview and extract a waveform segment."
+    },
+    "1.1.1": {
+      "body": "- Maintenance release: added automated code and dependency security checks and improved error-log formatting; no changes to audio capture."
     }
   }
 }
