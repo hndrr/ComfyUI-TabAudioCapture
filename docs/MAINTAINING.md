@@ -22,6 +22,8 @@ On Windows, activate with `.venv\Scripts\activate`. The tests stub ComfyUI's ser
 
 The tests cover audio formats, output paths, HTTP/WebSocket behavior, pause/resume, Live saves, independent meter cleanup, waveform selection and player updates. GitHub Actions runs these tests on pull requests and pushes to `main`.
 
+The shared test workflow uses `cache-mode: read`, including when called by release workflows, so code under test cannot write Actions caches. Existing pip caches can be restored; a cache miss downloads dependencies without saving a new cache. This restriction is enforced by scoped cache tokens independently of `GITHUB_TOKEN` permissions. See [GitHub's cache access documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#controlling-cache-access-with-cache-mode).
+
 Keep the dependency entries in `pyproject.toml` identical to `requirements.txt`. The release tests check this relationship. Development dependencies belong under `.github/`, not in runtime requirements.
 
 To check the actual archive with the publishing CLI:

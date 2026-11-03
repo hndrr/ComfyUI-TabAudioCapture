@@ -21,6 +21,7 @@ function setup(mode = "record") {
   let extension;
   const requests = [];
   const captureOptions = [];
+  const errors = [];
   const sent = [];
   const track = { stopped: false, stop() { this.stopped = true; }, addEventListener() {} };
   const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
@@ -84,7 +85,7 @@ function setup(mode = "record") {
       setTimeout: (callback, delay) => setTimeout(callback, delay).unref() },
     AudioContext: Context, AudioWorkletNode: Worklet, MediaStream: class { constructor() { return stream; } },
     WebSocket: Socket, URL, URLSearchParams, crypto: { randomUUID: () => "capture-123" },
-    console: { error() {} }, requestAnimationFrame: (callback) => callback(),
+    console: { error: (...values) => errors.push(values) }, requestAnimationFrame: (callback) => callback(),
   });
   const names = mode === "record" ? ["recording_file", "filename_prefix", "format", "wav_bit_depth", "m4a_bitrate"] : ["duration_seconds", "snapshot_id", "filename_prefix", "format", "wav_bit_depth", "m4a_bitrate"];
   const values = mode === "record" ? ["", "music/take", "wav", "24-bit PCM", "256k"] : [10, "", "music/take", "wav", "24-bit PCM", "256k"];
@@ -106,7 +107,7 @@ function setup(mode = "record") {
   };
   const find = (name) => node.widgets.find((widget) => widget.name === name);
   extension.nodeCreated(node);
-  return { node, find, state: node.__tabAudioState, navigator, stream, track, sent, requests, captureOptions, api };
+  return { node, find, state: node.__tabAudioState, navigator, stream, track, sent, requests, captureOptions, errors, api };
 }
 
 for (const mode of ["record", "live"]) {
@@ -210,6 +211,18 @@ test("failed sharing releases the button and allows another attempt", async () =
   assert.equal(state.active, false);
   assert.equal(state.button.label, "Start Recording");
   assert.match(state.statusWidget.textContent, /Permission denied/);
+});
+
+test("server errors cannot inject console lines and preserve the status text", async () => {
+  const { state, errors } = setup();
+  state.button.callback();
+  await tick();
+  const message = "Capture failed\r\n[INFO] done\u2028next\u2029line";
+  state.socket.emit("message", { event: "error", message });
+  assert.deepEqual(errors, [["[Tab Audio Capture]", '"Capture failed\\r\\n[INFO] done\\u2028next\\u2029line"']]);
+  assert.equal(state.statusWidget.textContent, `Error: ${message}`);
+  state.button.callback();
+  await tick();
 });
 
 test("live queue snapshot uses selected duration and updates its preview", async () => {
