@@ -113,7 +113,8 @@ function setStatus(state, message) {
 
 /** @param {any} state @param {string} message */
 function fail(state, message) {
-  console.error("[Tab Audio Capture]", message);
+  const logMessage = String(message).replace(/[\r\n\u2028\u2029]/g, " ");
+  console.error("[Tab Audio Capture]", logMessage);
   setStatus(state, `Error: ${message}`);
 }
 
