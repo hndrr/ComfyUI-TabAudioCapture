@@ -219,7 +219,7 @@ test("server errors cannot inject console lines and preserve the status text", a
   await tick();
   const message = "Capture failed\r\n[INFO] done\u2028next\u2029line";
   state.socket.emit("message", { event: "error", message });
-  assert.deepEqual(errors, [["[Tab Audio Capture]", "Capture failed  [INFO] done next line"]]);
+  assert.deepEqual(errors, [["[Tab Audio Capture]", '"Capture failed\\r\\n[INFO] done\\u2028next\\u2029line"']]);
   assert.equal(state.statusWidget.textContent, `Error: ${message}`);
   state.button.callback();
   await tick();
