@@ -50,11 +50,13 @@ Under **Settings → Actions → General → Workflow permissions**, enable **Al
 
 ## Security checks
 
-CodeQL scans Python, JavaScript and GitHub Actions on pull requests to `main`, pushes to `main`, and every Monday at 06:23 JST. It uses the `security-extended` query suite and can also be run manually. Findings appear under **Security → Code scanning** and in PR checks.
+CodeQL scans Python, JavaScript and GitHub Actions on pull requests to `main`, pushes to `main`, and every Monday at 06:23 JST. It uses the `security-extended` query suite and can also be run manually. Findings appear under **Security and quality → Code scanning** and in PR checks.
 
 Dependency review fails PR checks when a dependency change introduces a known vulnerability rated moderate or higher, including development dependencies. Results appear in the Actions summary without posting PR comments.
 
 Dependabot checks Python manifests in the repository root and `.github/` for security updates. Routine Python version-update PRs are disabled because runtime constraints follow ComfyUI. GitHub Actions updates are grouped into a weekly PR after a seven-day cooldown; security fixes are exempt from the cooldown. Keep runtime constraints synchronized between `requirements.txt` and `pyproject.toml` when reviewing a security fix.
+
+When merging Dependabot PRs, select **Create a merge commit**, including when enabling auto-merge. A squash commit authored by Dependabot can cause CodeQL runs on pushes to `main` to receive read-only permissions, preventing result uploads with HTTP 403 despite the workflow's `security-events: write` setting. CodeQL runs on `pull_request` can still upload results. See [GitHub's Dependabot troubleshooting guidance](https://docs.github.com/en/code-security/reference/code-scanning/troubleshoot-analysis-errors/resource-not-accessible#analysis-still-failing-on-the-default-branch).
 
 Under **Settings → Advanced Security**, enable **Dependabot alerts**, **Dependabot security updates**, **Secret scanning** and **Push protection**. These repository settings are separate from the committed workflow configuration. Keep CodeQL default setup disabled when using this repository's workflow to avoid conflicting configurations.
 
