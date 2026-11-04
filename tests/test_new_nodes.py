@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from test_audio_capture import package  # reuse isolated mocked ComfyUI installation
+from tests.test_audio_capture import package  # reuse isolated mocked ComfyUI installation
 
 
 def test_new_nodes_registered(package):
