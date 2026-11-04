@@ -102,6 +102,9 @@ test("smart capture records on threshold with pre-roll, saves, and restores hist
   // Two 128-ms chunks cross the 100ms confirmation threshold.
   x.send(0.0);
   x.send(0.5);
+  assert.ok(x.state.trace.length >= 2, "PCM samples populate the live mini waveform");
+  assert.match(x.state.meterText.textContent, /dBFS/);
+  assert.notEqual(x.state.meterFill.style.width, "0%");
   await tick(); await tick();
   assert.equal(x.sockets.length, 1);
   assert.equal(x.messages.some(m => typeof m === "string" && JSON.parse(m).command === "start"), true);
@@ -111,6 +114,7 @@ test("smart capture records on threshold with pre-roll, saves, and restores hist
   x.send(0.0); x.send(0.0); x.send(0.0);
   await tick(); await tick();
   assert.equal(x.state.history.length, 1, "status=" + x.state.status.textContent + "; elapsed=" + x.state.elapsed + "; lastSound=" + x.state.lastSound + "; hasTake=" + !!x.state.take + "; websocket=" + x.state.take?.ws?.readyState);
+  assert.equal(x.state.takeCount.textContent, "1 saved take");
   assert.equal(x.widgets[0].value, "tab_audio/smart_take_00001.wav");
   assert.match(x.state.player.src, /smart_take_00001.wav/);
   x.state.button.callback();
