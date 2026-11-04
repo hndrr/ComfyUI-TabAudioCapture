@@ -149,20 +149,22 @@ function processChunk(state, buffer) {
   state.elapsed += seconds;
   const threshold = Number(value(state.node, "threshold_db") ?? -35);
   const sounding = db >= threshold;
-  const prior = state.preRoll.slice();
   state.preRoll.push(buffer);
   state.preFrames += frames;
-  const maxFrames = state.context.sampleRate * Number(value(state.node, "pre_roll_seconds") ?? 1);
+  // Retain the confirmation interval as well as audio from before the onset.
+  const maxFrames = state.context.sampleRate * (
+    Number(value(state.node, "pre_roll_seconds") ?? 1) +
+    Number(value(state.node, "min_sound_seconds") ?? 0.5) + 0.1
+  );
   while (state.preFrames > maxFrames && state.preRoll.length > 1) {
     state.preFrames -= state.preRoll.shift().byteLength / 8;
   }
   if (!state.take) {
     state.soundDuration = sounding ? state.soundDuration + seconds : 0;
-    if (state.soundDuration >= Number(value(state.node, "min_sound_seconds") ?? 0.5)) {
-      // Include the sound accumulated during the trigger period.
-      state.preRoll = prior.concat([buffer]);
-      state.preFrames += prior.reduce((sum, b) => sum + b.byteLength / 8, 0);
-      void beginTake(state);
+    if (!state.stopping && state.soundDuration >= Number(value(state.node, "min_sound_seconds") ?? 0.5)) {
+      // The rolling buffer already contains the full trigger period; never duplicate it.
+      const opening = beginTake(state);
+      if (state.take) state.take.opening = opening;
       state.lastSound = state.elapsed;
       state.soundDuration = 0;
       return;
@@ -187,7 +189,7 @@ function processChunk(state, buffer) {
   }
 }
 async function start(state) {
-  if (state.active || state.starting) return;
+  if (state.active || state.starting || state.stopping) return;
   state.starting = true;
   status(state, "Choose a tab and enable audio sharing…");
   try {
@@ -225,11 +227,12 @@ async function start(state) {
   } finally { state.starting = false; }
 }
 async function stop(state) {
+  if (state.stopping) return;
+  state.stopping = true;
+  // Wait for a pending connection so a manual stop never loses an accepted take.
+  const opening = state.take?.opening;
+  if (opening) await opening.catch(() => {});
   state.active = false;
-  const take = state.take;
-  if (take && !take.ws) {
-    for (let i = 0; i < 20 && !take.ws && state.take === take; i++) await delay(100);
-  }
   if (state.take?.ws) await finalize(state);
   state.processor?.disconnect();
   state.source?.disconnect();
@@ -238,13 +241,14 @@ async function stop(state) {
   if (state.context?.state !== "closed") await state.context?.close();
   state.stream = null; state.context = null; state.processor = null;
   state.button.label = "Start Smart Capture";
+  state.stopping = false;
   if (!state.history.length) status(state, "Stopped");
   else status(state, "Stopped — " + state.history.length + " takes available");
 }
 function install(node) {
   if (node.__smartCapture) return;
   hide(node, "recording_file"); hide(node, "take_history");
-  const state = { node, active: false, starting: false, take: null, history: [], preRoll: [],
+  const state = { node, active: false, starting: false, stopping: false, take: null, history: [], preRoll: [],
     preFrames: 0, elapsed: 0, soundDuration: 0, lastSound: 0 };
   node.__smartCapture = state;
   const root = document.createElement("div");
