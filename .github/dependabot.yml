@@ -9,12 +9,10 @@ updates:
       interval: daily
     cooldown:
       default-days: 7
-    # Runtime constraints follow ComfyUI; only security fixes should raise them.
+    # Runtime constraints follow ComfyUI; routine version-update PRs stay disabled.
     open-pull-requests-limit: 0
-    groups:
-      python-security:
-        applies-to: security-updates
-        patterns: ['*']
+    # Security PR severity is controlled by repository auto-triage rules.
+    # Keep security updates separate so each dependency's impact is reviewed.
 
   - package-ecosystem: github-actions
     directory: /
