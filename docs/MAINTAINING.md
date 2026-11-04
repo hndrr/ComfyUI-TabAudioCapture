@@ -56,11 +56,28 @@ CodeQL scans Python, JavaScript and GitHub Actions on pull requests to `main`, p
 
 Dependency review fails PR checks when a dependency change introduces a known vulnerability rated moderate or higher, including development dependencies. Results appear in the Actions summary without posting PR comments.
 
-Dependabot checks Python manifests in the repository root and `.github/` for security updates. Routine Python version-update PRs are disabled because runtime constraints follow ComfyUI. GitHub Actions updates are grouped into a weekly PR after a seven-day cooldown; security fixes are exempt from the cooldown. Keep runtime constraints synchronized between `requirements.txt` and `pyproject.toml` when reviewing a security fix.
+Dependabot checks Python manifests in the repository root and `.github/` for security updates. Routine Python version-update PRs are disabled because runtime constraints follow ComfyUI. Security updates are kept separate for individual impact review. Routine GitHub Actions version updates remain grouped into a weekly PR after a seven-day cooldown; security fixes are exempt from the cooldown. Keep runtime constraints synchronized between `requirements.txt` and `pyproject.toml` when reviewing a security fix.
+
+Dependabot security alerts follow this policy:
+
+| Alert | Handling |
+| --- | --- |
+| Critical / High | Automatically request a security-fix PR when Dependabot can provide one. Check the affected package, vulnerable version, exercised code path and deployment exposure before deciding how to respond. Merge only after impact review and CI. |
+| Medium / Low | Keep the alert open for review without automatically requesting a PR, except where GitHub's low-impact development-dependency preset applies. |
+| Low-impact development dependency | Keep GitHub's **Dismiss low-impact alerts for development-scoped dependencies** preset enabled. It currently covers selected npm development dependencies, not every dependency used by CI. |
+| Unused vulnerable feature or inaccurate advisory | Confirm the package identity, installed version and whether the vulnerable feature can run. Record evidence when deferring or dismissing an alert, and reassess if usage or advisory details change. Do not add blanket exclusions by directory or package. |
+
+Under **Settings → Advanced Security**, keep **Dependabot alerts**, **Secret scanning** and **Push protection** enabled. Leave **Dependabot security updates** disabled: that switch requests PRs for all severities and would override the selective policy. Under **Dependabot auto-triage rules**, enable the repository rule **Open security PRs for Critical and High alerts** with:
+
+- **Target alerts:** `severity:critical severity:high` (repeat the key for OR; do not use `severity:critical,high`).
+- **Dismiss alerts:** unchecked.
+- **Open a pull request to resolve alerts:** checked.
+
+Keep the low-impact development-dependency preset enabled and **Dismiss package malware alerts** disabled. These repository settings are separate from `.github/dependabot.yml`; that file's `open-pull-requests-limit: 0` disables routine Python version-update PRs, not security-fix PRs. Dependency review's moderate-or-higher threshold remains independent of the automatic PR policy. See [GitHub's auto-triage documentation](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/auto-triage-dependabot-alerts), [the preset criteria](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-auto-triage-rules) and [the syntax verification article](https://dev.classmethod.jp/articles/dependabot-auto-triage-rules-sandbox-test/).
 
 When merging Dependabot PRs, select **Create a merge commit**, including when enabling auto-merge. A squash commit authored by Dependabot can cause CodeQL runs on pushes to `main` to receive read-only permissions, preventing result uploads with HTTP 403 despite the workflow's `security-events: write` setting. CodeQL runs on `pull_request` can still upload results. See [GitHub's Dependabot troubleshooting guidance](https://docs.github.com/en/code-security/reference/code-scanning/troubleshoot-analysis-errors/resource-not-accessible#analysis-still-failing-on-the-default-branch).
 
-Under **Settings → Advanced Security**, enable **Dependabot alerts**, **Dependabot security updates**, **Secret scanning** and **Push protection**. These repository settings are separate from the committed workflow configuration. Keep CodeQL default setup disabled when using this repository's workflow to avoid conflicting configurations.
+Keep CodeQL default setup disabled when using this repository's workflow to avoid conflicting configurations.
 
 ## Prepare the first release
 
