@@ -77,7 +77,7 @@ function setup() {
   };
   vm.runInNewContext(source, {
     app: {registerExtension(x) {extension = x;}}, api: {apiURL: p => "http://localhost:8188" + p},
-    document: {createElement: element}, window: {location: {href: "http://localhost:8188"}, isSecureContext: true},
+    document: {createElement: element}, window: {location: {href: "http://localhost:8188"}, isSecureContext: true, setTimeout, clearTimeout},
     navigator: {mediaDevices: {getDisplayMedia: async () => stream}},
     AudioContext: Context, AudioWorkletNode: Worklet,
     MediaStream: class { constructor() {} }, WebSocket: Socket,
