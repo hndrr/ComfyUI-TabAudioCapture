@@ -34,8 +34,6 @@ function setup(name) {
   });
   const nodeType = {prototype: {}};
   extension.beforeRegisterNodeDef(nodeType, {name});
-  class Node {}
-  Node.prototype = nodeType.prototype;
   const node = Object.create(nodeType.prototype);
   node.id = 42; node.size = [300, 180]; node.widgets = [];
   node.computeSize = () => [350, 240]; node.setSize = size => { node.size = size; };
@@ -50,7 +48,7 @@ function setup(name) {
     node.widgets.push(result);
     return result;
   };
-  node.onNodeCreated();
+  node.onNodeCreated?.();
   const widget = node.widgets.find(item => item.type === "audioLoopPreview" ||
     item.type === "audioFeaturePreview");
   const button = node.widgets.find(item => item.type === "button");
