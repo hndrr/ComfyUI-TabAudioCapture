@@ -66,7 +66,8 @@ The waveform displays the first batch; the same time range applies to every batc
 
 Smart Audio Capture records tab or system playback into individual takes based on the incoming sound level. Click **Start Smart Capture**, select a Chrome tab with **Share tab audio** (or a supported system-audio source), and play audio. The node begins a take after the input remains above `threshold_db` for `min_sound_seconds`. It includes up to `pre_roll_seconds` of buffered audio before the trigger, stops and saves each take after `silence_seconds` of silence, and then waits for the next take.
 
-- Saved takes appear in a selector and remain on disk under `ComfyUI/output` (WAV 24-bit PCM).
+- A compact live dBFS level bar and waveform monitor render directly from captured AudioWorklet PCM. These are temporary capture indicators, not a waveform reconstructed from an old saved take.
+- Saved takes appear in a selector with a take counter and built-in audio player; recordings remain on disk under `ComfyUI/output` (WAV 24-bit PCM).
 - The most recently saved take is selected automatically; selecting an older take changes the `AUDIO` and `saved_file_path` outputs for the next workflow execution.
 - History holds the latest 30 filenames in the workflow; older recordings are **not** deleted.
 - A take is capped at approximately 60 seconds. The detector uses RMS averaged over short PCM chunks, not semantic music or speech detection.
@@ -75,6 +76,8 @@ Smart Audio Capture records tab or system playback into individual takes based o
 ### Audio Loop Capture
 
 Connect any `AUDIO` input, including **Tab/System Audio Capture · Live**, to **Audio Loop Capture**. Set BPM, `bars`, and `beats_per_bar` to select a fixed-duration loop ending at the latest available sample (or earlier using `end_offset_seconds`). The output is regular `AUDIO` plus the loop duration in seconds.
+
+Click **Preview Loop** or execute the node to display a compact source waveform with the computed loop interval highlighted, and an exact duration readout. The preview is based on real input audio (first batch when batched), condensed to at most 512 min/max columns. Settings still use ComfyUI's standard widgets.
 
 An optional short `crossfade_ms` blends the end toward the loop beginning, but this is not an automatic beat detector, downbeat-aligner, or time-stretcher. The input must be long enough to contain the requested bars. The upstream Live node's snapshot window must cover the full loop.
 
@@ -85,7 +88,13 @@ Connect any standard `AUDIO` and choose the feature sampling `fps`, bass cutoff,
 - `features_json`: per-batch arrays of time-stamped `rms` (linear amplitude), `bass` and `treble` (relative spectral-energy amplitudes), and `onset` (positive spectral flux normalized to 0–1).
 - Summary FLOAT outputs: `mean_rms`, `mean_bass`, `mean_treble`, `max_onset`.
 
+Click **Analyze & Preview** or execute the node to display small RMS, bass, treble and onset graphs, summary statistics and a compact JSON example. The chart payload is capped at 160 aggregated data points from the first batch; the `features_json` output retains every analyzed frame.
+
 Features are calculated from a fixed audio snapshot, **not** continuously pushed downstream while a workflow executes. FFT features represent coarse analysis, not source separation or BPM estimation. Supply frame-wise JSON to downstream custom nodes, or use summary outputs directly.
+
+### UI implementation notes
+
+The mini-waveform, level bar and preview graphs use lightweight DOM/Canvas widgets inside normal ComfyUI nodes; they do not replace node headers, ports or standard settings. The `docs/images/smart_audio_capture_concept_mock.svg` image is a **concept illustration**, not a screenshot of running nodes, and contains unimplemented elements.
 
 ## Example workflows
 
