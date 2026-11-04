@@ -64,7 +64,7 @@ Dependabot security alerts follow this policy:
 | --- | --- |
 | Critical / High | Automatically request a security-fix PR when Dependabot can provide one. Check the affected package, vulnerable version, exercised code path and deployment exposure before deciding how to respond. Merge only after impact review and CI. |
 | Medium / Low | Keep the alert open for review without automatically requesting a PR, except where GitHub's low-impact development-dependency preset applies. |
-| Low-impact development dependency | Keep GitHub's **Dismiss low-impact alerts for development-scoped dependencies** preset enabled. It currently covers selected npm development dependencies, not every dependency used by CI. |
+| Low-impact development dependency | Keep GitHub's **Dismiss low impact issues for development-scoped dependencies** preset enabled (shown as **Dismiss low-impact alerts for development-scoped dependencies** in Settings). It currently covers selected npm development dependencies, not every dependency used by CI. |
 | Unused vulnerable feature or inaccurate advisory | Confirm the package identity, installed version and whether the vulnerable feature can run. Record evidence when deferring or dismissing an alert, and reassess if usage or advisory details change. Do not add blanket exclusions by directory or package. |
 
 Under **Settings → Advanced Security**, keep **Dependabot alerts**, **Secret scanning** and **Push protection** enabled. Leave **Dependabot security updates** disabled: that switch requests PRs for all severities and would override the selective policy. Under **Dependabot auto-triage rules**, enable the repository rule **Open security PRs for Critical and High alerts** with:
