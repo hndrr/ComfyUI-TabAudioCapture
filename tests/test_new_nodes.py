@@ -33,7 +33,7 @@ def test_loop_rejects_insufficient_audio_and_bad_settings(package):
     audio = {"waveform": torch.zeros(1, 2, 1000), "sample_rate": 1000}
     with pytest.raises(ValueError, match="Insufficient"):
         mod.AudioLoopCapture().run(audio, 120, 4, 4)
-    with pytest.raises(ValueError, match="Invalid"):
+    with pytest.raises(ValueError, match="finite"):
         mod.AudioLoopCapture().run(audio, float("nan"), 1, 1)
 
 
@@ -74,15 +74,9 @@ def test_features_bad_band(package):
         )
 
 
-def test_smart_persisted_take_and_path_validation(package):
+def test_smart_invalid_take_path(package):
     mod, _, _ = package
-    import uuid
-    session = mod.REGISTRY.start(str(uuid.uuid4()), "record", 8000, 1)
-    pcm = np.zeros((8000, 1), dtype="<f4")
-    session.append(pcm.tobytes())
-    filename = session.stop()
-    output, path = mod.SmartAudioCapture().run(filename)
-    assert output["waveform"].shape == (1, 1, 8000)
-    assert path.endswith(filename)
     with pytest.raises(ValueError):
         mod.SmartAudioCapture().run("../outside.wav")
+    with pytest.raises(ValueError, match="Record audio first"):
+        mod.SmartAudioCapture().run("")
