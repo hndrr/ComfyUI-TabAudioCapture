@@ -110,7 +110,7 @@ test("smart capture records on threshold with pre-roll, saves, and restores hist
   assert.equal(binary.length, 2);
   x.send(0.0); x.send(0.0); x.send(0.0);
   await tick(); await tick();
-  assert.equal(x.state.history.length, 1);
+  assert.equal(x.state.history.length, 1, "status=" + x.state.status.textContent + "; elapsed=" + x.state.elapsed + "; lastSound=" + x.state.lastSound + "; hasTake=" + !!x.state.take + "; websocket=" + x.state.take?.ws?.readyState);
   assert.equal(x.widgets[0].value, "tab_audio/smart_take_00001.wav");
   assert.match(x.state.player.src, /smart_take_00001.wav/);
   x.state.button.callback();
@@ -127,6 +127,6 @@ test("a manual stop finalizes an open take", async () => {
   await tick(); await tick();
   x.state.button.callback();
   await tick(); await tick();
-  assert.equal(x.state.history.length, 1);
+  assert.equal(x.state.history.length, 1, "status=" + x.state.status.textContent + "; elapsed=" + x.state.elapsed + "; lastSound=" + x.state.lastSound + "; hasTake=" + !!x.state.take + "; websocket=" + x.state.take?.ws?.readyState);
   assert.equal(x.state.active, false);
 });
