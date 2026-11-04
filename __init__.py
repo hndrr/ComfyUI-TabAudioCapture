@@ -13,6 +13,9 @@ from server import PromptServer
 from .sessions import M4A_BITRATES, REGISTRY, WAV_CODECS, load_recorded_wav, recording_path
 from .meter import AudioMeter
 from .range_select import AudioRangeSelect
+from .smart_capture import SmartAudioCapture
+from .loop_capture import AudioLoopCapture
+from .feature_extractor import AudioFeatureExtractor
 
 _LOG = logging.getLogger(__name__)
 
@@ -82,12 +85,18 @@ NODE_CLASS_MAPPINGS = {
     "TabAudioCaptureLive": LiveTabAudio,
     "TabAudioMeter": AudioMeter,
     "TabAudioRangeSelect": AudioRangeSelect,
+    "TabAudioCaptureSmart": SmartAudioCapture,
+    "TabAudioLoopCapture": AudioLoopCapture,
+    "TabAudioFeatureExtractor": AudioFeatureExtractor,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "TabAudioCaptureRecorder": "Tab/System Audio Capture",
     "TabAudioCaptureLive": "Tab/System Audio Capture · Live",
     "TabAudioMeter": "Audio Meter",
     "TabAudioRangeSelect": "Audio Range Select",
+    "TabAudioCaptureSmart": "Smart Audio Capture",
+    "TabAudioLoopCapture": "Audio Loop Capture",
+    "TabAudioFeatureExtractor": "Audio Feature Extractor",
 }
 WEB_DIRECTORY = "./web"
 
