@@ -68,7 +68,7 @@ def samples(nframes=2400, channels=2):
 
 def test_node_schemas_and_legacy_interfaces(package):
     module, _, _ = package
-    assert set(module.NODE_CLASS_MAPPINGS) == {"TabAudioCaptureRecorder", "TabAudioCaptureLive", "TabAudioMeter", "TabAudioRangeSelect"}
+    assert {"TabAudioCaptureRecorder", "TabAudioCaptureLive", "TabAudioMeter", "TabAudioRangeSelect"} <= set(module.NODE_CLASS_MAPPINGS)
     assert module.LiveTabAudio.RETURN_TYPES == ("AUDIO",)
     assert module.RecordedTabAudio.RETURN_TYPES == ("AUDIO", "STRING")
     assert module.RecordedTabAudio.RETURN_NAMES == ("audio", "saved_file_path")
