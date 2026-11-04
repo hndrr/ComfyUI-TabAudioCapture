@@ -37,6 +37,7 @@ function refresh(state) {
     select.append(option);
   });
   select.value = value(state.node, "recording_file") || state.history.at(-1) || "";
+  state.takeCount.textContent = state.history.length + " saved take" + (state.history.length === 1 ? "" : "s");
   const chosen = select.value;
   state.player.src = chosen ? savedUrl(chosen) : "";
   state.player.load();
@@ -45,6 +46,42 @@ function selectTake(state, file) {
   if (!state.history.includes(file)) return;
   get(state.node, "recording_file").value = file;
   refresh(state);
+}
+
+// Small live indicators inside the normal ComfyUI DOM widget. They represent
+// actual captured PCM and are intentionally not a separate WebAudio monitor.
+function drawIndicators(state, db, rms) {
+  if (state.removed) return;
+  const percent = Number.isFinite(db) ? Math.max(0, Math.min(100, (db + 60) / 60 * 100)) : 0;
+  state.meterFill.style.width = percent.toFixed(1) + "%";
+  state.meterFill.style.background = db >= -3
+    ? "var(--p-red-500,#e66868)" : "var(--p-green-500,#41bb82)";
+  state.meterText.textContent = Number.isFinite(db) ? db.toFixed(1) + " dBFS" : "−∞ dBFS";
+  state.trace.push(Math.min(1, Math.max(0, rms)));
+  if (state.trace.length > 180) state.trace.shift();
+  const canvas = state.canvas;
+  const width = Math.max(160, canvas.clientWidth || 340);
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(54 * ratio);
+  const ctx = canvas.getContext?.("2d");
+  if (!ctx) return;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.fillStyle = "var(--comfy-input-bg,#191c26)";
+  // Canvas 2D does not understand CSS variables. Use a fixed neutral surface.
+  ctx.fillStyle = "#191c26";
+  ctx.fillRect(0, 0, width, 54);
+  ctx.strokeStyle = "#637187";
+  ctx.beginPath(); ctx.moveTo(0, 27); ctx.lineTo(width, 27); ctx.stroke();
+  ctx.strokeStyle = "#89a3e9";
+  ctx.beginPath();
+  state.trace.forEach((v, i) => {
+    const x = i / 180 * width;
+    const h = Math.max(1, Math.min(25, v * 25));
+    ctx.moveTo(x, 27 - h);
+    ctx.lineTo(x, 27 + h);
+  });
+  ctx.stroke();
 }
 
 async function openTake(state) {
@@ -149,6 +186,7 @@ function processChunk(state, buffer) {
   state.elapsed += seconds;
   const threshold = Number(value(state.node, "threshold_db") ?? -35);
   const sounding = db >= threshold;
+  drawIndicators(state, db, Math.sqrt(energy / samples.length));
   state.preRoll.push(buffer);
   state.preFrames += frames;
   // Retain the confirmation interval as well as audio from before the onset.
@@ -212,6 +250,8 @@ async function start(state) {
     state.source = source; state.processor = processor; state.silent = silent;
     state.preRoll = []; state.preFrames = 0; state.elapsed = 0;
     state.soundDuration = 0; state.lastSound = 0;
+    state.trace = [];
+    drawIndicators(state, -Infinity, 0);
     processor.port.onmessage = event => {
       if (event.data?.type === "chunk") processChunk(state, event.data.buffer);
     };
@@ -248,24 +288,53 @@ async function stop(state) {
 function install(node) {
   if (node.__smartCapture) return;
   hide(node, "recording_file"); hide(node, "take_history");
-  const state = { node, active: false, starting: false, stopping: false, take: null, history: [], preRoll: [],
+  const state = { node, active: false, starting: false, stopping: false, removed: false,
+    trace: [], take: null, history: [], preRoll: [],
     preFrames: 0, elapsed: 0, soundDuration: 0, lastSound: 0 };
   node.__smartCapture = state;
   const root = document.createElement("div");
-  root.style.cssText = "width:100%;display:flex;flex-direction:column;gap:4px";
+  root.style.cssText = "width:100%;min-width:0;box-sizing:border-box;padding:6px 8px;display:flex;flex-direction:column;gap:6px;background:var(--comfy-menu-bg,#222);color:var(--input-text,#ddd);font:11px sans-serif;";
+  const meter = document.createElement("div");
+  meter.style.cssText = "width:100%;display:flex;gap:6px;align-items:center;";
+  const meterName = document.createElement("span");
+  meterName.textContent = "Live";
+  const meterTrack = document.createElement("div");
+  meterTrack.style.cssText = "flex:1;height:9px;overflow:hidden;border-radius:3px;border:1px solid var(--border-color,#575c65);background:var(--comfy-input-bg,#111)";
+  const meterFill = document.createElement("div");
+  meterFill.style.cssText = "height:100%;width:0;background:var(--p-green-500,#41bb82)";
+  meterTrack.append(meterFill);
+  const meterText = document.createElement("span");
+  meterText.textContent = "−∞ dBFS";
+  meterText.style.cssText = "min-width:67px;text-align:right;font-variant-numeric:tabular-nums";
+  meter.append(meterName, meterTrack, meterText);
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText = "display:block;width:100%;height:54px;border:1px solid var(--border-color,#464b59);border-radius:4px;box-sizing:border-box";
+  canvas.title = "Most recent captured audio, relative amplitude";
+  const takeRow = document.createElement("div");
+  takeRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;";
+  const takeHeading = document.createElement("span");
+  takeHeading.textContent = "Take history";
+  const takeCount = document.createElement("span");
+  takeCount.style.cssText = "color:var(--descrip-text,#aaa)";
+  takeRow.append(takeHeading, takeCount);
   const select = document.createElement("select");
-  select.style.width = "100%";
+  select.style.cssText = "width:100%;min-width:0;background:var(--comfy-input-bg,#171923);color:var(--input-text,#ddd);border:1px solid var(--border-color,#555);padding:4px;";
   select.addEventListener("change", () => selectTake(state, select.value));
   const player = document.createElement("audio");
-  player.controls = true; player.style.width = "100%";
+  player.controls = true; player.style.width = "100%"; player.preload = "metadata";
   const statusEl = document.createElement("div");
-  statusEl.style.cssText = "font:11px sans-serif;color:var(--descrip-text,#999)";
+  statusEl.style.cssText = "font:11px sans-serif;color:var(--descrip-text,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
   statusEl.textContent = "Idle";
-  root.append(select, player, statusEl);
+  root.append(meter, canvas, takeRow, select, player, statusEl);
   state.select = select; state.player = player; state.status = statusEl;
-  const dom = node.addDOMWidget("smart_capture_ui", "smartAudio", root, { serialize: false });
+  state.meterFill = meterFill; state.meterText = meterText;
+  state.canvas = canvas; state.takeCount = takeCount;
+  const dom = node.addDOMWidget("smart_capture_ui", "smartAudio", root, {
+    serialize: false, getMinHeight: () => 210, getMaxHeight: () => 210,
+  });
   dom.serialize = false;
-  dom.computeSize = () => [0, 110];
+  dom.computeSize = () => [0, 210];
+  drawIndicators(state, -Infinity, 0);
   state.button = node.addWidget("button", "Start Smart Capture", null,
     () => { void (state.active ? stop(state) : start(state)); }, { serialize: false });
   state.button.serialize = false;
@@ -284,7 +353,9 @@ function install(node) {
   };
   const removed = node.onRemoved;
   node.onRemoved = function (...args) {
-    void stop(state); return removed?.apply(this, args);
+    state.removed = true;
+    void stop(state);
+    return removed?.apply(this, args);
   };
   restore();
 }
