@@ -2,8 +2,30 @@
 from __future__ import annotations
 
 import math
+
+import numpy as np
 import torch
 
+
+
+def _preview_waveform(waveform, sample_rate, start, end):
+    """Compact min/max waveform for the first batch; no original PCM reaches the UI."""
+    source = waveform[0].detach().to(device="cpu", dtype=torch.float32).mean(dim=0).numpy()
+    total = len(source)
+    bins = min(512, total)
+    offsets = (np.arange(bins, dtype=np.int64) * total // bins)
+    minimum = np.minimum.reduceat(source, offsets)
+    maximum = np.maximum.reduceat(source, offsets)
+    values = np.nan_to_num(np.stack((minimum, maximum), axis=-1),
+                           nan=0.0, posinf=0.0, neginf=0.0)
+    return {
+        "minmax": values.round(5).tolist(),
+        "total_seconds": total / sample_rate,
+        "start_seconds": start / sample_rate,
+        "end_seconds": end / sample_rate,
+        "duration_seconds": (end - start) / sample_rate,
+        "first_batch_only": waveform.shape[0] > 1,
+    }
 
 class AudioLoopCapture:
     @classmethod
@@ -20,6 +42,7 @@ class AudioLoopCapture:
     RETURN_TYPES = ("AUDIO", "FLOAT")
     RETURN_NAMES = ("audio", "duration_seconds")
     FUNCTION = "run"
+    OUTPUT_NODE = True
     CATEGORY = "audio/Tab Audio Capture"
     DESCRIPTION = (
         "Extract the last N bars from AUDIO using a supplied BPM. "
@@ -55,4 +78,7 @@ class AudioLoopCapture:
                 result[..., -fade:] * (1 - weights) +
                 result[..., :fade].clone() * weights
             )
-        return ({**audio, "waveform": result}, length / sr)
+        return {
+            "result": ({**audio, "waveform": result}, length / sr),
+            "ui": {"loop_preview": [_preview_waveform(waveform, sr, start, end)]},
+        }
