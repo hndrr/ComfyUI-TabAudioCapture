@@ -21,6 +21,7 @@ class AudioFeatureExtractor:
     RETURN_TYPES = ("STRING", "FLOAT", "FLOAT", "FLOAT", "FLOAT")
     RETURN_NAMES = ("features_json", "mean_rms", "mean_bass", "mean_treble", "max_onset")
     FUNCTION = "run"
+    OUTPUT_NODE = True
     CATEGORY = "audio/Tab Audio Capture"
     DESCRIPTION = (
         "Analyze an AUDIO snapshot into a timestamped JSON envelope of RMS, "
@@ -85,5 +86,32 @@ class AudioFeatureExtractor:
             "bands_hz": {"bass_max": bass_cutoff_hz, "treble_min": treble_start_hz},
             "batches": batches,
         }
-        return (json.dumps(payload, separators=(",", ":")), mean("rms"), mean("bass"),
-                mean("treble"), max((r["onset"] for r in flat), default=0.0))
+        means = {name: mean(name) for name in ("rms", "bass", "treble")}
+        max_onset = max((r["onset"] for r in flat), default=0.0)
+        first = batches[0]
+        # Bound UI payload to 160 display points, regardless of source length/fps.
+        n_bins = min(160, len(first))
+        preview = []
+        for i in range(n_bins):
+            start = i * len(first) // n_bins
+            end = (i + 1) * len(first) // n_bins
+            region = first[start:end]
+            preview.append({
+                "time": region[0]["time"],
+                "rms": round(sum(r["rms"] for r in region) / len(region), 5),
+                "bass": round(sum(r["bass"] for r in region) / len(region), 5),
+                "treble": round(sum(r["treble"] for r in region) / len(region), 5),
+                "onset": max(r["onset"] for r in region),
+            })
+        return {
+            "result": (json.dumps(payload, separators=(",", ":")),
+                       means["rms"], means["bass"], means["treble"], max_onset),
+            "ui": {"feature_preview": [{
+                "samples": preview,
+                "total_frames": len(first),
+                "batch_count": len(batches),
+                "duration_seconds": payload["duration_seconds"],
+                "summary": {**means, "max_onset": max_onset},
+                "head_json": json.dumps(first[:2], ensure_ascii=False),
+            }]},
+        }
